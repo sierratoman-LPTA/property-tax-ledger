@@ -107,7 +107,7 @@ tfoot td.tl{text-align:left}
     <div class="sb-header">
       <h2>Property Tax Ledger <span class="sync-dot" id="syncDot"></span></h2>
       <p>Lane Property Tax Advocates</p>
-      <p style="font-size:9px;opacity:.4;margin-top:2px;">v2.1</p>
+      <p style="font-size:9px;opacity:.4;margin-top:2px;">v2.3</p>
     </div>
     <div class="sb-tree" id="sbTree"></div>
     <div class="sb-footer">
@@ -191,7 +191,27 @@ tfoot td.tl{text-align:left}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-// ── Firebase ───────────────────────────────────────────────────────────────────
+// ── Undo System ───────────────────────────────────────────────────────────────
+var undoStack = [];
+var MAX_UNDO = 50;
+
+function pushUndo(){
+  undoStack.push(JSON.stringify(db));
+  if(undoStack.length > MAX_UNDO) undoStack.shift();
+}
+
+function undo(){
+  if(!undoStack.length){ alert('Nothing to undo.'); return; }
+  var prev = undoStack.pop();
+  db = JSON.parse(prev);
+  saveDB();
+  renderSidebar();
+  var f = getActiveFolder();
+  if(f){ renderTable(); renderKPIs(); }
+  else renderMain();
+}
+
+
 firebase.initializeApp({
   apiKey:"AIzaSyDlexpThTKIfq8zLacqCclVFThVEhtDjeY",
   authDomain:"propertytaxledger.firebaseapp.com",
@@ -457,15 +477,16 @@ function delFolder(cid,fid){
 }
 
 // ── Row CRUD ───────────────────────────────────────────────────────────────────
-function addRow(){var f=getActiveFolder();if(!f)return;if(!f.rows)f.rows=[];f.rows.push(emptyRow());saveDB();renderTable();renderKPIs();}
+function addRow(){var f=getActiveFolder();if(!f)return;pushUndo();if(!f.rows)f.rows=[];f.rows.push(emptyRow());saveDB();renderTable();renderKPIs();}
 function removeRow(id){
-  var f=getActiveFolder();if(!f)return;
+  var f=getActiveFolder();if(!f)return;pushUndo();
   f.rows=f.rows.filter(function(r){return r.id!==id;});
   saveDB();renderTable();renderKPIs();
 }
 function updateField(id,field,val){
   var f=getActiveFolder();if(!f)return;
   var r=(f.rows||[]).filter(function(x){return x.id===id;})[0];if(!r)return;
+  pushUndo();
   r[field]=val;recalcRow(r);saveDB();renderKPIs();
   var tr=document.querySelector('tr[data-id="'+id+'"]');
   if(tr){
@@ -661,6 +682,233 @@ function exportExcel(){
 
   var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
   html+='<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>';
+  html+='<x:ExcelWorksheet><x:Name>Executive Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
+  for(var i=0;i<cl.folders.length;i++){
+    html+='<x:ExcelWorksheet><x:Name>'+cl.folders[i].year+' Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
+    html+='<x:ExcelWorksheet><x:Name>'+cl.folders[i].year+' Ledger</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
+  }
+  html+='</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>';
+
+  // ── TAB 1: COMBINED EXECUTIVE SUMMARY (all years) ──────────────────────────
+  html+='<table style="mso-displayed-decimal-separator:\'.\';mso-displayed-thousand-separator:\',\';">';
+
+  // Main title
+  html+='<tr><td colspan="9" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:16pt;font-family:Arial;padding:12px;border-bottom:4px solid #C9A84C;">'+cl.name+' &mdash; Property Tax Executive Summary (All Years)</td></tr>';
+  html+='<tr><td colspan="9" style="background:#EEF2F7;color:#666;font-size:8pt;font-family:Arial;padding:4px;">Prepared by Lane Property Tax Advocates &nbsp;|&nbsp; Confidential &nbsp;|&nbsp; All values reflect certified appraisal data</td></tr>';
+  html+='<tr><td colspan="9" style="height:10px;"></td></tr>';
+
+  // Combined totals across ALL years
+  var allRows=[];
+  for(var fi=0;fi<cl.folders.length;fi++){allRows=allRows.concat(cl.folders[fi].rows||[]);}
+  var allReduced=allRows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+  var allTotalRed=allRows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+  var allSavings=totMV(allRows,'taxSavings');
+  var allLit=allRows.filter(function(r){return r.status==='Active Litigation';}).length;
+  var allArb=allRows.filter(function(r){return r.status==='Arbitration';}).length;
+
+  html+='<tr><td colspan="9" style="background:#002147;color:#fff;font-weight:bold;font-size:11pt;font-family:Arial;padding:6px;border-bottom:2px solid #C9A84C;">Combined Portfolio Summary &mdash; All Years</td></tr>';
+  var kl=['Total Accounts','Accts Reduced','Litigation','Arbitration','Total Value Reduced','Total Tax Savings','Years Tracked','',''];
+  html+='<tr>';
+  for(var k=0;k<9;k++)html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:center;padding:4px;border:1px solid #ccc;">'+(kl[k]||'')+'</td>';
+  html+='</tr><tr>';
+  var kv=[allRows.length,allReduced,allLit,allArb,allTotalRed>0?fmtMV(allTotalRed):'--',allSavings>0?fmtMV(allSavings):'--',cl.folders.length,'',''];
+  for(var k=0;k<9;k++)html+='<td style="background:#F0F6FF;color:#002147;font-weight:bold;font-size:14pt;font-family:Arial;text-align:center;padding:8px;border:1px solid #ddd;">'+kv[k]+'</td>';
+  html+='</tr><tr><td colspan="9" style="height:14px;"></td></tr>';
+
+  // Year-by-year comparison table
+  html+='<tr><td colspan="9" style="background:#002147;color:#fff;font-weight:bold;font-size:10pt;font-family:Arial;padding:6px;border-bottom:2px solid #C9A84C;">Year-by-Year Breakdown</td></tr>';
+  html+='<tr>';
+  var ybHdrs=['Tax Year','Accounts','Reduced','Litigation','Arbitration','Prior Value Total','Prelim Value Total','Total Value Reduced','Tax Savings'];
+  for(var h=0;h<ybHdrs.length;h++)html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;border:1px solid #ccc;text-align:'+(h>1?'right':'left')+';">'+ybHdrs[h]+'</td>';
+  html+='</tr>';
+  for(var fi=0;fi<cl.folders.length;fi++){
+    var f=cl.folders[fi];var rows=f.rows||[];
+    var red=rows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+    var tred=rows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+    var sav=totMV(rows,'taxSavings');
+    var lit2=rows.filter(function(r){return r.status==='Active Litigation';}).length;
+    var arb2=rows.filter(function(r){return r.status==='Arbitration';}).length;
+    var bg=fi%2===0?'#FFFFFF':'#EEF4FB';
+    html+='<tr>';
+    html+='<td style="background:'+bg+';font-weight:bold;font-size:10pt;font-family:Arial;padding:5px;border:1px solid #eee;color:#002147;">'+f.year+'</td>';
+    html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+rows.length+'</td>';
+    html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+red+'</td>';
+    html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+lit2+'</td>';
+    html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+arb2+'</td>';
+    html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+fmtMV(totMV(rows,'priorVal'))+'</td>';
+    html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+fmtMV(totMV(rows,'prelim'))+'</td>';
+    html+='<td style="background:'+bg+';color:#155724;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+(tred>0?fmtMV(tred):'--')+'</td>';
+    html+='<td style="background:'+bg+';color:#155724;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;border:1px solid #eee;text-align:right;">'+(sav>0?fmtMV(sav):'--')+'</td>';
+    html+='</tr>';
+  }
+  // Totals row
+  html+='<tr>';
+  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;">TOTAL</td>';
+  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+allRows.length+'</td>';
+  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+allReduced+'</td>';
+  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+allLit+'</td>';
+  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+allArb+'</td>';
+  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+fmtMV(totMV(allRows,'priorVal'))+'</td>';
+  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+fmtMV(totMV(allRows,'prelim'))+'</td>';
+  html+='<td style="background:#002147;color:#a8d5b5;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+(allTotalRed>0?fmtMV(allTotalRed):'--')+'</td>';
+  html+='<td style="background:#002147;color:#a8d5b5;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;text-align:right;">'+(allSavings>0?fmtMV(allSavings):'--')+'</td>';
+  html+='</tr>';
+  html+='</table><br/><br/>';
+
+  // ── TABS 2+: Each year gets a SUMMARY tab + LEDGER tab ────────────────────
+  for(var fi=0;fi<cl.folders.length;fi++){
+    var f=cl.folders[fi];var rows=f.rows||[];
+    var reduced=rows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+    var totalRed=rows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+    var savings=totMV(rows,'taxSavings');
+    var lit3=rows.filter(function(r){return r.status==='Active Litigation';}).length;
+    var arb3=rows.filter(function(r){return r.status==='Arbitration';}).length;
+    var t24=totMV(rows,'priorVal'),t25=totMV(rows,'prelim');
+    var chg=t24>0&&t25>0?((t25-t24)/t24*100).toFixed(1)+'%':'--';
+
+    // ── YEAR SUMMARY TAB ──
+    html+='<table style="mso-displayed-decimal-separator:\'.\';mso-displayed-thousand-separator:\',\';">';
+    html+='<tr><td colspan="9" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:14pt;font-family:Arial;padding:10px;border-bottom:3px solid #C9A84C;">'+cl.name+' &mdash; '+f.year+' Tax Year Summary</td></tr>';
+    html+='<tr><td colspan="9" style="background:#EEF2F7;color:#666;font-size:8pt;font-family:Arial;padding:4px;">Prepared by Lane Property Tax Advocates &nbsp;|&nbsp; Confidential</td></tr>';
+    html+='<tr><td colspan="9" style="height:10px;"></td></tr>';
+
+    // KPI row
+    html+='<tr><td colspan="9" style="background:#002147;color:#fff;font-weight:bold;font-size:10pt;font-family:Arial;padding:6px;border-bottom:2px solid #C9A84C;">'+f.year+' Key Metrics</td></tr>';
+    var skl=['Total Accounts','Accts Reduced','Litigation','Arbitration','Total Value Reduced','Tax Savings This Year','Portfolio Chg','',''];
+    html+='<tr>';
+    for(var k=0;k<9;k++)html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:center;padding:4px;border:1px solid #ccc;">'+(skl[k]||'')+'</td>';
+    html+='</tr><tr>';
+    var skv=[rows.length,reduced,lit3,arb3,totalRed>0?fmtMV(totalRed):'--',savings>0?fmtMV(savings):'--',chg,'',''];
+    for(var k=0;k<9;k++){
+      var isHigh=(k===4||k===5);
+      html+='<td style="background:'+(isHigh?'#D4EDDA':'#F0F6FF')+';color:'+(isHigh?'#155724':'#002147')+';font-weight:bold;font-size:14pt;font-family:Arial;text-align:center;padding:8px;border:2px solid '+(isHigh?'#28A745':'#ddd')+';">'+skv[k]+'</td>';
+    }
+    html+='</tr>';
+    // Tax savings banner for this year
+    html+='<tr><td colspan="9" style="height:8px;"></td></tr>';
+    html+='<tr><td colspan="9" style="background:#D4EDDA;color:#155724;font-weight:bold;font-size:16pt;font-family:Arial;text-align:center;padding:12px;border:2px solid #28A745;">'+f.year+' TAX SAVINGS: '+(savings>0?fmtMV(savings):'$0')+'</td></tr>';
+    html+='<tr><td colspan="9" style="height:14px;"></td></tr>';
+
+    // County breakdown + Top 5 reductions
+    html+='<tr>';
+    html+='<td colspan="4" style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;">Accounts by County</td>';
+    html+='<td style="background:#fff;"> </td>';
+    html+='<td colspan="4" style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:5px;">Top 5 Reductions</td>';
+    html+='</tr><tr>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;padding:4px;border:1px solid #ccc;">County</td>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">Accounts</td>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">% Portfolio</td>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">'+f.labels.prior+'</td>';
+    html+='<td style="background:#fff;"> </td>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;padding:4px;border:1px solid #ccc;">Address</td>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;padding:4px;border:1px solid #ccc;">Owner</td>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">Prior FMV</td>';
+    html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">$ Saved</td>';
+    html+='</tr>';
+
+    var CNTS=['Harris','Brazoria','Montgomery','Fort Bend','Galveston','San Jacinto','Other'];
+    var ctyD=[];
+    for(var ci=0;ci<CNTS.length;ci++){var co=CNTS[ci];var cr=rows.filter(function(r){return r.cad===co;});if(cr.length)ctyD.push({county:co,count:cr.length,pct:(cr.length/rows.length*100).toFixed(1),v:totMV(cr,'priorVal')});}
+    var topRed=rows.map(function(r){return{addr:r.address||'',owner:r.owner||'',prior:parseMV(r.priorVal)||0,red:(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0)};})
+      .filter(function(r){return r.red>0;}).sort(function(a,b){return b.red-a.red;}).slice(0,5);
+    var maxR=Math.max(ctyD.length,topRed.length);
+    for(var ri=0;ri<maxR;ri++){
+      var bg=ri%2===0?'#FFFFFF':'#EEF4FB';
+      html+='<tr>';
+      if(ri<ctyD.length){var x=ctyD[ri];html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+x.county+'</td><td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+x.count+'</td><td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+x.pct+'%</td><td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+fmtMV(x.v)+'</td>';}
+      else{html+='<td colspan="4" style="background:'+bg+'"></td>';}
+      html+='<td style="background:#fff;"> </td>';
+      if(ri<topRed.length){var tr3=topRed[ri];html+='<td style="background:#D4EDDA;font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+tr3.addr.substring(0,32)+'</td><td style="background:#D4EDDA;font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+tr3.owner.substring(0,26)+'</td><td style="background:#D4EDDA;font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+fmtMV(tr3.prior)+'</td><td style="background:#D4EDDA;color:#155724;font-weight:bold;font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+fmtMV(tr3.red)+'</td>';}
+      else{html+='<td colspan="4" style="background:'+bg+'"></td>';}
+      html+='</tr>';
+    }
+    html+='<tr><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;font-family:Arial;padding:4px;border:1px solid #ccc;">TOTAL</td><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">'+rows.length+'</td><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">100%</td><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #ccc;">'+fmtMV(t24)+'</td><td colspan="5" style="background:#DCE8F4;"></td></tr>';
+    html+='</table><br/><br/>';
+
+    // ── YEAR LEDGER TAB ──
+    html+='<table style="mso-displayed-decimal-separator:\'.\';mso-displayed-thousand-separator:\',\';">';
+    var L=f.labels;
+    var hdrs=['#','CAD','Account #','Address','Property Name','Property Type','Improv Type','CAD Owner/Assessee',
+      L.prior,L.prelim,L.prelimAppr||'Prelim Appr Value',L.finalAppr,L.finalMkt,
+      'Market Reduction *','% Change *','Tax Rate','Tax Savings *','Status','Notes'];
+    var NC=hdrs.length;
+
+    html+='<tr><td colspan="'+NC+'" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:13pt;font-family:Arial;padding:8px;border-bottom:3px solid #C9A84C;">'+cl.name+' &mdash; '+f.year+' Property Tax Ledger</td></tr>';
+    html+='<tr><td colspan="'+NC+'" style="background:#EEF2F7;color:#666;font-size:8pt;font-family:Arial;padding:4px;">Prepared by Lane Property Tax Advocates &nbsp;|&nbsp; Tax Year '+f.year+' &nbsp;|&nbsp; Confidential</td></tr>';
+    html+='<tr><td colspan="'+NC+'" style="background:#F4F6FA;height:6px;"></td></tr>';
+    html+='<tr>';
+    for(var hi=0;hi<hdrs.length;hi++)html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;text-align:center;padding:6px;border-bottom:2px solid #C9A84C;white-space:nowrap;">'+hdrs[hi]+'</td>';
+    html+='</tr>';
+
+    // Use current sort order for export
+    var exportRows = sortedRows(rows);
+
+    for(var ri=0;ri<exportRows.length;ri++){
+      var r=exportRows[ri];
+      var statusFills={'Active Litigation':'#FFF3CD','Arbitration':'#CCE5FF','Reduced Below Last Year':'#D4EDDA','Completed':'#F8F9FA'};
+      var bg=statusFills[r.status]||(ri%2===0?'#FFFFFF':'#EEF4FB');
+      var pv2=parseFloat(r.pctChange)||0;
+      var pctColor=pv2<0?'#155724':pv2>0?'#721c24':'#444';
+      var redAmt=parseMV(r.mktRed)||0;
+      var savAmt=parseMV(r.taxSavings)||0;
+      html+='<tr>';
+      html+='<td style="background:'+bg+';color:#888;font-size:9pt;font-family:Arial;text-align:center;padding:4px;border:1px solid #eee;">'+(ri+1)+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.cad||'')+'</td>';
+      // Account number as text to preserve leading zeros
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;mso-number-format:\'@\';">'+String(r.account||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.address||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.propName||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.propType||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.impType||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.owner||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(parseMV(r.priorVal)?fmtMV(parseMV(r.priorVal)):'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(parseMV(r.prelim)?fmtMV(parseMV(r.prelim)):'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(parseMV(r.prelimAppr)?fmtMV(parseMV(r.prelimAppr)):'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(parseMV(r.finalAppr)?fmtMV(parseMV(r.finalAppr)):'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(parseMV(r.finalMkt)?fmtMV(parseMV(r.finalMkt)):'')+'</td>';
+      html+='<td style="background:'+bg+';color:'+(redAmt>0?'#155724':'#444')+';font-weight:'+(redAmt>0?'bold':'normal')+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(redAmt>0?fmtMV(redAmt):'')+'</td>';
+      html+='<td style="background:'+bg+';color:'+pctColor+';font-weight:bold;font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(r.pctChange||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(r.taxRate||'')+'</td>';
+      html+='<td style="background:'+bg+';color:'+(savAmt>0?'#155724':'#444')+';font-weight:'+(savAmt>0?'bold':'normal')+';font-size:9pt;font-family:Arial;text-align:right;padding:4px;border:1px solid #eee;">'+(savAmt>0?fmtMV(savAmt):'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.status||'')+'</td>';
+      html+='<td style="background:'+bg+';font-size:9pt;font-family:Arial;padding:4px;border:1px solid #eee;">'+(r.notes||'')+'</td>';
+      html+='</tr>';
+    }
+
+    // Totals
+    html+='<tr>';
+    html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:6px;">TOTALS</td>';
+    html+='<td style="background:#002147;color:#fff;font-size:9pt;font-family:Arial;padding:6px;"></td>';
+    html+='<td style="background:#002147;color:#fff;font-size:9pt;font-family:Arial;padding:6px;text-align:right;">'+exportRows.length+' accounts</td>';
+    var totFs=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed'];
+    for(var ti=0;ti<totFs.length;ti++){var t=totMV(rows,totFs[ti]);html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;text-align:right;padding:6px;">'+(t>0?fmtMV(t):'')+'</td>';}
+    html+='<td style="background:#002147;color:#fff;padding:6px;"></td>';
+    html+='<td style="background:#002147;color:#fff;padding:6px;"></td>';
+    var ts2=totMV(rows,'taxSavings');
+    html+='<td style="background:#002147;color:#a8d5b5;font-weight:bold;font-size:9pt;font-family:Arial;text-align:right;padding:6px;">'+(ts2>0?fmtMV(ts2):'')+'</td>';
+    html+='<td style="background:#002147;color:#fff;padding:6px;"></td>';
+    html+='<td style="background:#002147;color:#fff;padding:6px;"></td>';
+    html+='</tr>';
+    html+='</table><br/><br/>';
+  }
+
+  html+='</body></html>';
+
+  var blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download=cl.name+' - Property Tax Report.xls';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+  var cl=getClient(activeClientId);
+  if(!cl||!cl.folders||!cl.folders.length){alert('Please select a client with data.');return;}
+
+  var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+  html+='<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>';
 
   // Sheet names
   html+='<x:ExcelWorksheet><x:Name>Executive Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
@@ -847,7 +1095,7 @@ function renderKPIs(){
   k=document.getElementById('kpi_reduced');if(k)k.textContent=reduced;
   k=document.getElementById('kpi_lit');if(k)k.textContent=lit;
   k=document.getElementById('kpi_arb');if(k)k.textContent=arb;
-  k=document.getElementById('kpi_savings');if(k)k.textContent=totalRed>0?'$'+Math.round(totalRed).toLocaleString():'$0';
+  k=document.getElementById('kpi_savings');if(k)k.textContent=totalRed>0?'
 }
 
 // ── Fields ─────────────────────────────────────────────────────────────────────
@@ -1016,6 +1264,426 @@ function renderTab(){
       +'<option value="full"'+(viewMode==='full'?' selected':'')+'>Full View (+ property/type cols)</option>'
       +'</select>'
       +'<div style="margin-left:auto;display:flex;gap:6px">'
+      +'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="undo()" title="Undo last change">&#8630; Undo</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="openPasteModal()">&#128203; Paste from Excel</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="addRow()">+ Add Row</button>'
+      +'</div></div>'
+      +'<div id="tableWrap"></div>'
+      +'<div class="legend">'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#FFF3CD;border-color:#FFC107"></div>Active Litigation</div>'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#CCE5FF;border-color:#004085"></div>Arbitration</div>'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#D4EDDA;border-color:#28A745"></div>Reduced Below Last Year</div>'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#f8f9fa;border-color:#adb5bd"></div>Completed</div>'
+      +'<span style="font-size:11px;color:#888;margin-left:6px">&#8595; = reduced &nbsp; * = auto-calculated</span>'
+      +'</div>';
+    renderTable();renderKPIs();
+  } else {
+    el.innerHTML='<div id="summaryContent"></div>';renderSummary();
+  }
+}
+function switchTab(t){activeTab=t;renderTab();}
+document.addEventListener('input',function(e){if(e.target&&e.target.id==='pasteArea')onPasteInput();});
+
+// ── Seed Demo Data ─────────────────────────────────────────────────────────────
+function seedDemo(){
+  if(!db.clients)db.clients=[];
+  var rows=[
+    {id:uid(),cad:'Harris',account:'1401380020003',address:'1705 OLIVER ST',propName:'Lower Heights',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC ET AL',priorVal:'23008704',prelim:'30252654',prelimAppr:'30252654',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Active Litigation',notes:''},
+    {id:uid(),cad:'Harris',account:'1065400000001',address:'12121 KATY FWY',propName:'Tully Shopping Center',propType:'Retail',impType:'Strip Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'18016780',prelim:'20770679',prelimAppr:'20770679',finalAppr:'19917983',finalMkt:'19917983',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Active Litigation',notes:''},
+    {id:uid(),cad:'Brazoria',account:'172773',address:'3126 S HIGHWAY 35',propName:'Highland Square',propType:'Retail',impType:'Regional Shopping Center',owner:'HIGHLAND SQUARE LTD',priorVal:'15500000',prelim:'17221060',prelimAppr:'17221060',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Harris',account:'1378860010001',address:'6515 GARTH RD',propName:'',propType:'Retail',impType:'Community Shopping Center',owner:'99 WEST 570 PARTNERS LLC',priorVal:'13045898',prelim:'13590925',prelimAppr:'13590925',finalAppr:'11800000',finalMkt:'11800000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Harris',account:'1500100010001',address:'5010 GARTH RD',propName:'Baytown Commons',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'8658515',prelim:'9677723',prelimAppr:'9677723',finalAppr:'7000000',finalMkt:'7000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Fort Bend',account:'R73817',address:'1903 TEXAS PKWY',propName:'Hunters Square',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES - Silvestri',priorVal:'3912114',prelim:'7624325',prelimAppr:'7624325',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Arbitration',notes:''},
+    {id:uid(),cad:'Brazoria',account:'175159',address:'1216 FM 1462',propName:'Alvin Shopping Center',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'4379715',prelim:'4528810',prelimAppr:'4528810',finalAppr:'2500000',finalMkt:'2500000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Harris',account:'0341980000008',address:'3316 SHAVER ST',propName:'South Shaver Square',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'5532800',prelim:'5983319',prelimAppr:'5983319',finalAppr:'5000000',finalMkt:'5000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+  ];
+  for(var i=0;i<rows.length;i++)recalcRow(rows[i]);
+  db.clients.push({id:uid(),name:'Silvestri Investments',firm:'Lane Property Tax Advocates',expanded:true,
+    folders:[{id:uid(),year:'2025',labels:defaultLabels('2025'),rows:rows}]});
+}
+</script>
+</body>
+</html>
++Math.round(totalRed).toLocaleString():'$0';
+  k=document.getElementById('kpi_taxsavings');if(k)k.textContent=savings>0?'
+}
+
+// ── Fields ─────────────────────────────────────────────────────────────────────
+function getFields(labels){
+  var base=[
+    {k:'_rownum',label:'#',w:40,mv:false,auto:true},
+    {k:'cad',label:'CAD',w:95,mv:false},
+    {k:'account',label:'Account #',w:125,mv:false},
+    {k:'address',label:'Address',w:175,mv:false},
+    {k:'propName',label:'Property Name',w:135,mv:false,full:true},
+    {k:'propType',label:'Property Type',w:120,mv:false,full:true},
+    {k:'impType',label:'Improvement Type',w:135,mv:false,full:true},
+    {k:'owner',label:'CAD Owner/Assessee',w:160,mv:false},
+    {k:'priorVal',label:labels.prior,w:130,mv:true},
+    {k:'prelim',label:labels.prelim,w:130,mv:true},
+    {k:'prelimAppr',label:labels.prelimAppr||'Prelim Appr Value',w:130,mv:true},
+    {k:'finalAppr',label:labels.finalAppr,w:130,mv:true},
+    {k:'finalMkt',label:labels.finalMkt,w:130,mv:true},
+    {k:'mktRed',label:'Market Reduction *',w:130,mv:true,calc:true},
+    {k:'pctChange',label:'% Change *',w:100,mv:false,calc:true},
+    {k:'taxRate',label:'Tax Rate %',w:80,mv:false},
+    {k:'taxSavings',label:'Tax Savings *',w:120,mv:true,calc:true},
+    {k:'status',label:'Status',w:155,mv:false},
+    {k:'notes',label:'Notes',w:130,mv:false},
+  ];
+  return viewMode==='full'?base:base.filter(function(f){return !f.full;});
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────────
+function renderTable(){
+  var f=getActiveFolder();if(!f)return;
+  var sq=searchQ.toLowerCase();
+  var rows=(f.rows||[]).filter(function(r){
+    if(filterCAD!=='All'&&r.cad!==filterCAD)return false;
+    if(filterStatus!=='All'&&r.status!==filterStatus)return false;
+    if(sq&&![r.address,r.owner,r.account,r.propName].some(function(v){return(v||'').toLowerCase().indexOf(sq)>=0;}))return false;
+    return true;
+  });
+  var vf=getFields(f.labels);var sorted=sortedRows(rows);
+  var thead='<thead><tr>';
+  for(var i=0;i<vf.length;i++){
+    var fld=vf[i];
+    var arr=fld.auto?'':sortKey===fld.k?(sortDir===1?' &#9650;':' &#9660;'):'<span style="opacity:.2"> &#9650;</span>';
+    var cls=fld.calc?' class="calc-col"':'';
+    thead+='<th'+cls+' style="min-width:'+fld.w+'px'+(fld.auto?';cursor:default':'')+'"'+(fld.auto?'':' onclick="sortBy(\''+fld.k+'\')"')+'>'+esc(fld.label)+arr+'</th>';
+  }
+  thead+='<th style="width:28px"></th></tr></thead>';
+  var tbody='<tbody>';
+  for(var ri=0;ri<sorted.length;ri++){
+    var r=sorted[ri];
+    var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);var isRed=b&&fv&&fv<b;
+    var cls=SCLS[r.status]||'';
+    var pv=parseFloat(r.pctChange)||0;
+    var pctColor=r.pctChange?(pv<0?'#155724':pv>0?'#721c24':'#555'):'#555';
+    tbody+='<tr data-id="'+r.id+'" class="'+cls+'">';
+    for(var fi=0;fi<vf.length;fi++){
+      var fld=vf[fi];
+      if(fld.k==='_rownum'){
+        tbody+='<td class="num-cell">'+(ri+1)+'</td>';
+      } else if(fld.k==='cad'){
+        var opts='';for(var ci=0;ci<COUNTIES.length;ci++)opts+='<option'+(r.cad===COUNTIES[ci]?' selected':'')+'>'+COUNTIES[ci]+'</option>';
+        tbody+='<td style="min-width:'+fld.w+'px"><select onchange="updateField(\''+r.id+'\',\'cad\',this.value)">'+opts+'</select></td>';
+      } else if(fld.k==='status'){
+        var sopts='';for(var si=0;si<STATUS.length;si++)sopts+='<option'+(r.status===STATUS[si]?' selected':'')+'>'+STATUS[si]+'</option>';
+        tbody+='<td style="min-width:'+fld.w+'px"><select onchange="updateField(\''+r.id+'\',\'status\',this.value)">'+sopts+'</select></td>';
+      } else if(fld.k==='pctChange'){
+        tbody+='<td class="pct-cell calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:'+pctColor+'">'+esc(r.pctChange||'')+'</td>';
+      } else if(fld.k==='mktRed'){
+        tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.mktRed)||'')+'</td>';
+      } else if(fld.k==='taxSavings'){
+        tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.taxSavings)||'')+'</td>';
+      } else if(fld.k==='finalAppr'){
+        tbody+='<td style="min-width:'+fld.w+'px;text-align:right">'
+          +'<input value="'+esc(fmtMV(r.finalAppr))+'" onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/>'
+          +'<span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';
+      } else if(fld.mv){
+        tbody+='<td style="min-width:'+fld.w+'px;text-align:right">'
+          +'<input value="'+esc(fmtMV(r[fld.k]))+'" onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';
+      } else {
+        tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'" onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';
+      }
+    }
+    tbody+='<td><button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button></td>';
+    tbody+='</tr>';
+  }
+  tbody+='</tbody>';
+  var tfoot='<tfoot><tr>';
+  for(var fi=0;fi<vf.length;fi++){
+    var fld=vf[fi];
+    if(fld.k==='_rownum')tfoot+='<td class="tl" style="font-size:10px;opacity:.7">'+sorted.length+(sorted.length!==(f.rows||[]).length?' shown':'')+'</td>';
+    else if(fld.k==='owner')tfoot+='<td class="tl">'+(f.rows||[]).length+' accounts</td>';
+    else if(fld.mv){var t=totMV(f.rows||[],fld.k);tfoot+='<td>'+(t>0?'$'+Math.round(t).toLocaleString():'')+'</td>';}
+    else tfoot+='<td></td>';
+  }
+  tfoot+='<td></td></tr></tfoot>';
+  document.getElementById('tableWrap').innerHTML='<div class="tbl-wrap"><table>'+thead+tbody+tfoot+'</table></div>';
+}
+
+// ── Summary ────────────────────────────────────────────────────────────────────
+function renderSummary(){
+  var f=getActiveFolder();if(!f)return;var cl=getClient(activeClientId);var rows=f.rows||[];
+  var t24=totMV(rows,'priorVal'),t25=totMV(rows,'prelim');
+  var chg=(t24>0&&t25>0)?((t25-t24)/t24*100).toFixed(1):null;
+  var ctyData=[];
+  for(var i=0;i<COUNTIES.length;i++){var co=COUNTIES[i];var cr=rows.filter(function(r){return r.cad===co;});if(cr.length)ctyData.push({county:co,count:cr.length,pct:(cr.length/rows.length*100).toFixed(1),v24:totMV(cr,'priorVal')});}
+  var topRed=rows.map(function(r){return{address:r.address,owner:r.owner,priorVal:r.priorVal,finalAppr:r.finalAppr,_red:(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0)};})
+    .filter(function(r){return r._red>0;}).sort(function(a,b){return b._red-a._red;}).slice(0,10);
+  var cRows='';for(var i=0;i<ctyData.length;i++){var x=ctyData[i];cRows+='<tr><td>'+esc(x.county)+'</td><td style="text-align:right">'+x.count+'</td><td style="text-align:right">'+x.pct+'%</td><td style="text-align:right">'+(x.v24>0?'$'+Math.round(x.v24).toLocaleString():'--')+'</td></tr>';}
+  var rRows=topRed.length?topRed.map(function(r){return'<tr><td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.address||'--')+'</td><td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.owner||'--')+'</td><td style="text-align:right">'+fmtMV(r.priorVal)+'</td><td style="text-align:right">'+fmtMV(r.finalAppr)+'</td><td style="text-align:right;color:#155724;font-weight:700">$'+Math.round(r._red).toLocaleString()+'</td></tr>';}).join(''):'<tr><td colspan="5" style="padding:12px;color:#aaa;text-align:center">Enter prior and final appr values to see reductions</td></tr>';
+  var chgHtml=chg?(' &middot; Portfolio change: <b style="color:'+(parseFloat(chg)>=0?'#856404':'#155724')+'">'+(parseFloat(chg)>=0?'+':'')+chg+'%</b>'):'';
+  document.getElementById('summaryContent').innerHTML=
+    '<div style="margin-bottom:12px;font-size:13px;color:#555"><b>'+esc(cl?cl.name:'')+'</b> &middot; '+esc(f.year)+chgHtml+'</div>'
+    +'<div class="sum-grid">'
+    +'<div class="sum-card"><div class="sum-hdr">Accounts by County</div>'
+    +'<table><thead><tr><th>County</th><th style="text-align:right">Accounts</th><th style="text-align:right">% Portfolio</th><th style="text-align:right">'+esc(f.labels.prior)+'</th></tr></thead>'
+    +'<tbody>'+cRows+'</tbody><tfoot><tr><td>TOTAL</td><td style="text-align:right">'+rows.length+'</td><td style="text-align:right">100%</td><td style="text-align:right">'+(t24>0?'$'+Math.round(t24).toLocaleString():'--')+'</td></tr></tfoot></table></div>'
+    +'<div class="sum-card"><div class="sum-hdr">Top Reductions</div>'
+    +'<table><thead><tr><th>Address</th><th>Owner</th><th style="text-align:right">Prior Value</th><th style="text-align:right">Final Appr</th><th style="text-align:right">$ Reduced</th></tr></thead>'
+    +'<tbody>'+rRows+'</tbody></table></div></div>';
+}
+
+// ── Main Render ────────────────────────────────────────────────────────────────
+function renderMain(){
+  var el=document.getElementById('content');
+  var f=getActiveFolder();var cl=getClient(activeClientId);
+  if(!f){
+    el.innerHTML='<div class="empty-state"><h2>'+(cl?esc(cl.name):'No client selected')+'</h2>'
+      +'<p>'+(cl?'Click a year folder in the sidebar, or click <b>+ add year / folder</b>.':'Click <b>+ New Client</b> in the sidebar, or use <b>&#8679; Import Excel / CSV</b>.')+'</p></div>';
+    return;
+  }
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div><span style="font-size:17px;font-weight:700;color:var(--navy)">'+esc(cl?cl.name:'')+'</span>'
+    +'<span class="yr-badge">'+esc(f.year)+'</span>'
+    +'<span style="font-size:12px;color:#888;margin-left:8px">'+esc(cl?cl.firm||'':'')+'</span></div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button class="btn btn-sm btn-navy" onclick="exportExcel()">&#8595; Export Excel</button>'
+    +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')">&#9881; Edit Folder</button>'
+    +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="editClientModal(\''+activeClientId+'\')">&#9881; Edit Client</button>'
+    +'</div></div>'
+    +'<div class="tabs">'
+    +'<button class="tab'+(activeTab==='ledger'?' active':'')+'" onclick="switchTab(\'ledger\')">Account Ledger</button>'
+    +'<button class="tab'+(activeTab==='summary'?' active':'')+'" onclick="switchTab(\'summary\')">Summary View</button>'
+    +'</div><div id="tabContent"></div>';
+  renderTab();
+}
+function renderTab(){
+  var f=getActiveFolder();if(!f)return;var el=document.getElementById('tabContent');
+  if(activeTab==='ledger'){
+    var cadOpts='<option'+(filterCAD==='All'?' selected':'')+'>All</option>';
+    for(var i=0;i<COUNTIES.length;i++)cadOpts+='<option'+(filterCAD===COUNTIES[i]?' selected':'')+'>'+COUNTIES[i]+'</option>';
+    var stOpts='<option'+(filterStatus==='All'?' selected':'')+'>All</option>';
+    for(var i=0;i<STATUS.length;i++){if(STATUS[i]!=='None')stOpts+='<option'+(filterStatus===STATUS[i]?' selected':'')+'>'+STATUS[i]+'</option>';}
+    el.innerHTML='<div class="kpi-row">'
+      +'<div class="kpi"><div class="lbl">Total Accounts</div><div class="val" id="kpi_total">'+(f.rows||[]).length+'</div></div>'
+      +'<div class="kpi"><div class="lbl">Accounts Reduced</div><div class="val" id="kpi_reduced">0</div></div>'
+      +'<div class="kpi"><div class="lbl">Active Litigation</div><div class="val" id="kpi_lit">0</div></div>'
+      +'<div class="kpi"><div class="lbl">Arbitration</div><div class="val" id="kpi_arb">0</div></div>'
+      +'<div class="kpi"><div class="lbl">Total Value Reduced</div><div class="val" id="kpi_savings">$0</div></div>'
+      +'</div>'
+      +'<div class="toolbar">'
+      +'<input placeholder="Search address, owner, account..." value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderTable()"/>'
+      +'<select onchange="filterCAD=this.value;renderTable()">'+cadOpts+'</select>'
+      +'<select onchange="filterStatus=this.value;renderTable()">'+stOpts+'</select>'
+      +'<select onchange="viewMode=this.value;renderTable()" style="width:190px">'
+      +'<option value="basic"'+(viewMode==='basic'?' selected':'')+'>Standard View</option>'
+      +'<option value="full"'+(viewMode==='full'?' selected':'')+'>Full View (+ property/type cols)</option>'
+      +'</select>'
+      +'<div style="margin-left:auto;display:flex;gap:6px">'
+      +'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="undo()" title="Undo last change">&#8630; Undo</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="openPasteModal()">&#128203; Paste from Excel</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="addRow()">+ Add Row</button>'
+      +'</div></div>'
+      +'<div id="tableWrap"></div>'
+      +'<div class="legend">'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#FFF3CD;border-color:#FFC107"></div>Active Litigation</div>'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#CCE5FF;border-color:#004085"></div>Arbitration</div>'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#D4EDDA;border-color:#28A745"></div>Reduced Below Last Year</div>'
+      +'<div class="legend-item"><div class="legend-dot" style="background:#f8f9fa;border-color:#adb5bd"></div>Completed</div>'
+      +'<span style="font-size:11px;color:#888;margin-left:6px">&#8595; = reduced &nbsp; * = auto-calculated</span>'
+      +'</div>';
+    renderTable();renderKPIs();
+  } else {
+    el.innerHTML='<div id="summaryContent"></div>';renderSummary();
+  }
+}
+function switchTab(t){activeTab=t;renderTab();}
+document.addEventListener('input',function(e){if(e.target&&e.target.id==='pasteArea')onPasteInput();});
+
+// ── Seed Demo Data ─────────────────────────────────────────────────────────────
+function seedDemo(){
+  if(!db.clients)db.clients=[];
+  var rows=[
+    {id:uid(),cad:'Harris',account:'1401380020003',address:'1705 OLIVER ST',propName:'Lower Heights',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC ET AL',priorVal:'23008704',prelim:'30252654',prelimAppr:'30252654',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Active Litigation',notes:''},
+    {id:uid(),cad:'Harris',account:'1065400000001',address:'12121 KATY FWY',propName:'Tully Shopping Center',propType:'Retail',impType:'Strip Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'18016780',prelim:'20770679',prelimAppr:'20770679',finalAppr:'19917983',finalMkt:'19917983',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Active Litigation',notes:''},
+    {id:uid(),cad:'Brazoria',account:'172773',address:'3126 S HIGHWAY 35',propName:'Highland Square',propType:'Retail',impType:'Regional Shopping Center',owner:'HIGHLAND SQUARE LTD',priorVal:'15500000',prelim:'17221060',prelimAppr:'17221060',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Harris',account:'1378860010001',address:'6515 GARTH RD',propName:'',propType:'Retail',impType:'Community Shopping Center',owner:'99 WEST 570 PARTNERS LLC',priorVal:'13045898',prelim:'13590925',prelimAppr:'13590925',finalAppr:'11800000',finalMkt:'11800000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Harris',account:'1500100010001',address:'5010 GARTH RD',propName:'Baytown Commons',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'8658515',prelim:'9677723',prelimAppr:'9677723',finalAppr:'7000000',finalMkt:'7000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Fort Bend',account:'R73817',address:'1903 TEXAS PKWY',propName:'Hunters Square',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES - Silvestri',priorVal:'3912114',prelim:'7624325',prelimAppr:'7624325',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Arbitration',notes:''},
+    {id:uid(),cad:'Brazoria',account:'175159',address:'1216 FM 1462',propName:'Alvin Shopping Center',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'4379715',prelim:'4528810',prelimAppr:'4528810',finalAppr:'2500000',finalMkt:'2500000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Harris',account:'0341980000008',address:'3316 SHAVER ST',propName:'South Shaver Square',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'5532800',prelim:'5983319',prelimAppr:'5983319',finalAppr:'5000000',finalMkt:'5000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+  ];
+  for(var i=0;i<rows.length;i++)recalcRow(rows[i]);
+  db.clients.push({id:uid(),name:'Silvestri Investments',firm:'Lane Property Tax Advocates',expanded:true,
+    folders:[{id:uid(),year:'2025',labels:defaultLabels('2025'),rows:rows}]});
+}
+</script>
+</body>
+</html>
++Math.round(savings).toLocaleString():'$0';
+}
+
+// ── Fields ─────────────────────────────────────────────────────────────────────
+function getFields(labels){
+  var base=[
+    {k:'_rownum',label:'#',w:40,mv:false,auto:true},
+    {k:'cad',label:'CAD',w:95,mv:false},
+    {k:'account',label:'Account #',w:125,mv:false},
+    {k:'address',label:'Address',w:175,mv:false},
+    {k:'propName',label:'Property Name',w:135,mv:false,full:true},
+    {k:'propType',label:'Property Type',w:120,mv:false,full:true},
+    {k:'impType',label:'Improvement Type',w:135,mv:false,full:true},
+    {k:'owner',label:'CAD Owner/Assessee',w:160,mv:false},
+    {k:'priorVal',label:labels.prior,w:130,mv:true},
+    {k:'prelim',label:labels.prelim,w:130,mv:true},
+    {k:'prelimAppr',label:labels.prelimAppr||'Prelim Appr Value',w:130,mv:true},
+    {k:'finalAppr',label:labels.finalAppr,w:130,mv:true},
+    {k:'finalMkt',label:labels.finalMkt,w:130,mv:true},
+    {k:'mktRed',label:'Market Reduction *',w:130,mv:true,calc:true},
+    {k:'pctChange',label:'% Change *',w:100,mv:false,calc:true},
+    {k:'taxRate',label:'Tax Rate %',w:80,mv:false},
+    {k:'taxSavings',label:'Tax Savings *',w:120,mv:true,calc:true},
+    {k:'status',label:'Status',w:155,mv:false},
+    {k:'notes',label:'Notes',w:130,mv:false},
+  ];
+  return viewMode==='full'?base:base.filter(function(f){return !f.full;});
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────────
+function renderTable(){
+  var f=getActiveFolder();if(!f)return;
+  var sq=searchQ.toLowerCase();
+  var rows=(f.rows||[]).filter(function(r){
+    if(filterCAD!=='All'&&r.cad!==filterCAD)return false;
+    if(filterStatus!=='All'&&r.status!==filterStatus)return false;
+    if(sq&&![r.address,r.owner,r.account,r.propName].some(function(v){return(v||'').toLowerCase().indexOf(sq)>=0;}))return false;
+    return true;
+  });
+  var vf=getFields(f.labels);var sorted=sortedRows(rows);
+  var thead='<thead><tr>';
+  for(var i=0;i<vf.length;i++){
+    var fld=vf[i];
+    var arr=fld.auto?'':sortKey===fld.k?(sortDir===1?' &#9650;':' &#9660;'):'<span style="opacity:.2"> &#9650;</span>';
+    var cls=fld.calc?' class="calc-col"':'';
+    thead+='<th'+cls+' style="min-width:'+fld.w+'px'+(fld.auto?';cursor:default':'')+'"'+(fld.auto?'':' onclick="sortBy(\''+fld.k+'\')"')+'>'+esc(fld.label)+arr+'</th>';
+  }
+  thead+='<th style="width:28px"></th></tr></thead>';
+  var tbody='<tbody>';
+  for(var ri=0;ri<sorted.length;ri++){
+    var r=sorted[ri];
+    var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);var isRed=b&&fv&&fv<b;
+    var cls=SCLS[r.status]||'';
+    var pv=parseFloat(r.pctChange)||0;
+    var pctColor=r.pctChange?(pv<0?'#155724':pv>0?'#721c24':'#555'):'#555';
+    tbody+='<tr data-id="'+r.id+'" class="'+cls+'">';
+    for(var fi=0;fi<vf.length;fi++){
+      var fld=vf[fi];
+      if(fld.k==='_rownum'){
+        tbody+='<td class="num-cell">'+(ri+1)+'</td>';
+      } else if(fld.k==='cad'){
+        var opts='';for(var ci=0;ci<COUNTIES.length;ci++)opts+='<option'+(r.cad===COUNTIES[ci]?' selected':'')+'>'+COUNTIES[ci]+'</option>';
+        tbody+='<td style="min-width:'+fld.w+'px"><select onchange="updateField(\''+r.id+'\',\'cad\',this.value)">'+opts+'</select></td>';
+      } else if(fld.k==='status'){
+        var sopts='';for(var si=0;si<STATUS.length;si++)sopts+='<option'+(r.status===STATUS[si]?' selected':'')+'>'+STATUS[si]+'</option>';
+        tbody+='<td style="min-width:'+fld.w+'px"><select onchange="updateField(\''+r.id+'\',\'status\',this.value)">'+sopts+'</select></td>';
+      } else if(fld.k==='pctChange'){
+        tbody+='<td class="pct-cell calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:'+pctColor+'">'+esc(r.pctChange||'')+'</td>';
+      } else if(fld.k==='mktRed'){
+        tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.mktRed)||'')+'</td>';
+      } else if(fld.k==='taxSavings'){
+        tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.taxSavings)||'')+'</td>';
+      } else if(fld.k==='finalAppr'){
+        tbody+='<td style="min-width:'+fld.w+'px;text-align:right">'
+          +'<input value="'+esc(fmtMV(r.finalAppr))+'" onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/>'
+          +'<span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';
+      } else if(fld.mv){
+        tbody+='<td style="min-width:'+fld.w+'px;text-align:right">'
+          +'<input value="'+esc(fmtMV(r[fld.k]))+'" onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';
+      } else {
+        tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'" onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';
+      }
+    }
+    tbody+='<td><button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button></td>';
+    tbody+='</tr>';
+  }
+  tbody+='</tbody>';
+  var tfoot='<tfoot><tr>';
+  for(var fi=0;fi<vf.length;fi++){
+    var fld=vf[fi];
+    if(fld.k==='_rownum')tfoot+='<td class="tl" style="font-size:10px;opacity:.7">'+sorted.length+(sorted.length!==(f.rows||[]).length?' shown':'')+'</td>';
+    else if(fld.k==='owner')tfoot+='<td class="tl">'+(f.rows||[]).length+' accounts</td>';
+    else if(fld.mv){var t=totMV(f.rows||[],fld.k);tfoot+='<td>'+(t>0?'$'+Math.round(t).toLocaleString():'')+'</td>';}
+    else tfoot+='<td></td>';
+  }
+  tfoot+='<td></td></tr></tfoot>';
+  document.getElementById('tableWrap').innerHTML='<div class="tbl-wrap"><table>'+thead+tbody+tfoot+'</table></div>';
+}
+
+// ── Summary ────────────────────────────────────────────────────────────────────
+function renderSummary(){
+  var f=getActiveFolder();if(!f)return;var cl=getClient(activeClientId);var rows=f.rows||[];
+  var t24=totMV(rows,'priorVal'),t25=totMV(rows,'prelim');
+  var chg=(t24>0&&t25>0)?((t25-t24)/t24*100).toFixed(1):null;
+  var ctyData=[];
+  for(var i=0;i<COUNTIES.length;i++){var co=COUNTIES[i];var cr=rows.filter(function(r){return r.cad===co;});if(cr.length)ctyData.push({county:co,count:cr.length,pct:(cr.length/rows.length*100).toFixed(1),v24:totMV(cr,'priorVal')});}
+  var topRed=rows.map(function(r){return{address:r.address,owner:r.owner,priorVal:r.priorVal,finalAppr:r.finalAppr,_red:(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0)};})
+    .filter(function(r){return r._red>0;}).sort(function(a,b){return b._red-a._red;}).slice(0,10);
+  var cRows='';for(var i=0;i<ctyData.length;i++){var x=ctyData[i];cRows+='<tr><td>'+esc(x.county)+'</td><td style="text-align:right">'+x.count+'</td><td style="text-align:right">'+x.pct+'%</td><td style="text-align:right">'+(x.v24>0?'$'+Math.round(x.v24).toLocaleString():'--')+'</td></tr>';}
+  var rRows=topRed.length?topRed.map(function(r){return'<tr><td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.address||'--')+'</td><td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.owner||'--')+'</td><td style="text-align:right">'+fmtMV(r.priorVal)+'</td><td style="text-align:right">'+fmtMV(r.finalAppr)+'</td><td style="text-align:right;color:#155724;font-weight:700">$'+Math.round(r._red).toLocaleString()+'</td></tr>';}).join(''):'<tr><td colspan="5" style="padding:12px;color:#aaa;text-align:center">Enter prior and final appr values to see reductions</td></tr>';
+  var chgHtml=chg?(' &middot; Portfolio change: <b style="color:'+(parseFloat(chg)>=0?'#856404':'#155724')+'">'+(parseFloat(chg)>=0?'+':'')+chg+'%</b>'):'';
+  document.getElementById('summaryContent').innerHTML=
+    '<div style="margin-bottom:12px;font-size:13px;color:#555"><b>'+esc(cl?cl.name:'')+'</b> &middot; '+esc(f.year)+chgHtml+'</div>'
+    +'<div class="sum-grid">'
+    +'<div class="sum-card"><div class="sum-hdr">Accounts by County</div>'
+    +'<table><thead><tr><th>County</th><th style="text-align:right">Accounts</th><th style="text-align:right">% Portfolio</th><th style="text-align:right">'+esc(f.labels.prior)+'</th></tr></thead>'
+    +'<tbody>'+cRows+'</tbody><tfoot><tr><td>TOTAL</td><td style="text-align:right">'+rows.length+'</td><td style="text-align:right">100%</td><td style="text-align:right">'+(t24>0?'$'+Math.round(t24).toLocaleString():'--')+'</td></tr></tfoot></table></div>'
+    +'<div class="sum-card"><div class="sum-hdr">Top Reductions</div>'
+    +'<table><thead><tr><th>Address</th><th>Owner</th><th style="text-align:right">Prior Value</th><th style="text-align:right">Final Appr</th><th style="text-align:right">$ Reduced</th></tr></thead>'
+    +'<tbody>'+rRows+'</tbody></table></div></div>';
+}
+
+// ── Main Render ────────────────────────────────────────────────────────────────
+function renderMain(){
+  var el=document.getElementById('content');
+  var f=getActiveFolder();var cl=getClient(activeClientId);
+  if(!f){
+    el.innerHTML='<div class="empty-state"><h2>'+(cl?esc(cl.name):'No client selected')+'</h2>'
+      +'<p>'+(cl?'Click a year folder in the sidebar, or click <b>+ add year / folder</b>.':'Click <b>+ New Client</b> in the sidebar, or use <b>&#8679; Import Excel / CSV</b>.')+'</p></div>';
+    return;
+  }
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div><span style="font-size:17px;font-weight:700;color:var(--navy)">'+esc(cl?cl.name:'')+'</span>'
+    +'<span class="yr-badge">'+esc(f.year)+'</span>'
+    +'<span style="font-size:12px;color:#888;margin-left:8px">'+esc(cl?cl.firm||'':'')+'</span></div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button class="btn btn-sm btn-navy" onclick="exportExcel()">&#8595; Export Excel</button>'
+    +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')">&#9881; Edit Folder</button>'
+    +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="editClientModal(\''+activeClientId+'\')">&#9881; Edit Client</button>'
+    +'</div></div>'
+    +'<div class="tabs">'
+    +'<button class="tab'+(activeTab==='ledger'?' active':'')+'" onclick="switchTab(\'ledger\')">Account Ledger</button>'
+    +'<button class="tab'+(activeTab==='summary'?' active':'')+'" onclick="switchTab(\'summary\')">Summary View</button>'
+    +'</div><div id="tabContent"></div>';
+  renderTab();
+}
+function renderTab(){
+  var f=getActiveFolder();if(!f)return;var el=document.getElementById('tabContent');
+  if(activeTab==='ledger'){
+    var cadOpts='<option'+(filterCAD==='All'?' selected':'')+'>All</option>';
+    for(var i=0;i<COUNTIES.length;i++)cadOpts+='<option'+(filterCAD===COUNTIES[i]?' selected':'')+'>'+COUNTIES[i]+'</option>';
+    var stOpts='<option'+(filterStatus==='All'?' selected':'')+'>All</option>';
+    for(var i=0;i<STATUS.length;i++){if(STATUS[i]!=='None')stOpts+='<option'+(filterStatus===STATUS[i]?' selected':'')+'>'+STATUS[i]+'</option>';}
+    el.innerHTML='<div class="kpi-row">'
+      +'<div class="kpi"><div class="lbl">Total Accounts</div><div class="val" id="kpi_total">'+(f.rows||[]).length+'</div></div>'
+      +'<div class="kpi"><div class="lbl">Accounts Reduced</div><div class="val" id="kpi_reduced">0</div></div>'
+      +'<div class="kpi"><div class="lbl">Active Litigation</div><div class="val" id="kpi_lit">0</div></div>'
+      +'<div class="kpi"><div class="lbl">Arbitration</div><div class="val" id="kpi_arb">0</div></div>'
+      +'<div class="kpi"><div class="lbl">Total Value Reduced</div><div class="val" id="kpi_savings">$0</div></div>'
+      +'</div>'
+      +'<div class="toolbar">'
+      +'<input placeholder="Search address, owner, account..." value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderTable()"/>'
+      +'<select onchange="filterCAD=this.value;renderTable()">'+cadOpts+'</select>'
+      +'<select onchange="filterStatus=this.value;renderTable()">'+stOpts+'</select>'
+      +'<select onchange="viewMode=this.value;renderTable()" style="width:190px">'
+      +'<option value="basic"'+(viewMode==='basic'?' selected':'')+'>Standard View</option>'
+      +'<option value="full"'+(viewMode==='full'?' selected':'')+'>Full View (+ property/type cols)</option>'
+      +'</select>'
+      +'<div style="margin-left:auto;display:flex;gap:6px">'
+      +'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="undo()" title="Undo last change">&#8630; Undo</button>'
       +'<button class="btn btn-navy btn-sm" onclick="openPasteModal()">&#128203; Paste from Excel</button>'
       +'<button class="btn btn-navy btn-sm" onclick="addRow()">+ Add Row</button>'
       +'</div></div>'
