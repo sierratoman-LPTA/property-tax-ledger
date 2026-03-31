@@ -1,0 +1,202 @@
+import { useState } from "react";
+
+const NAVY = "#002147";
+const GOLD = "#C9A84C";
+const COUNTIES = ["Harris","Brazoria","Montgomery","Fort Bend","Galveston","San Jacinto","Other"];
+const STATUS_LIST = ["None","Active Litigation","Arbitration","Reduced Below Last Year","Completed"];
+const STATUS_COLORS = {
+  "Active Litigation": { bg: "#FFF3CD", border: "#FFC107", text: "#856404" },
+  "Arbitration":       { bg: "#CCE5FF", border: "#004085", text: "#004085" },
+  "Reduced Below Last Year": { bg: "#D4EDDA", border: "#28A745", text: "#155724" },
+  "Completed":         { bg: "#f8f9fa", border: "#adb5bd", text: "#495057" },
+};
+
+const DEMO = [
+  { id:"1", cad:"Harris",    account:"1401380020003", address:"1705 OLIVER ST",    owner:"FESTIVAL PROPERTIES INC ET AL", priorVal:23008704, prelim:30252654, prelimAppr:30252654, finalAppr:null,     finalMkt:null,     taxRate:.02204279, status:"Active Litigation" },
+  { id:"2", cad:"Harris",    account:"1065400000001", address:"12121 KATY FWY",    owner:"FESTIVAL PROPERTIES INC",       priorVal:18016780, prelim:20770679, prelimAppr:20770679, finalAppr:19917983, finalMkt:19917983, taxRate:.02204279, status:"Active Litigation" },
+  { id:"3", cad:"Brazoria",  account:"172773",        address:"3126 S HIGHWAY 35", owner:"HIGHLAND SQUARE LTD",           priorVal:15500000, prelim:17221060, prelimAppr:17221060, finalAppr:null,     finalMkt:null,     taxRate:.02204279, status:"None" },
+  { id:"4", cad:"Harris",    account:"1378860010001", address:"6515 GARTH RD",     owner:"99 WEST 570 PARTNERS LLC",      priorVal:13045898, prelim:13590925, prelimAppr:13590925, finalAppr:11800000, finalMkt:11800000, taxRate:.02204279, status:"None" },
+  { id:"5", cad:"Harris",    account:"1500100010001", address:"5010 GARTH RD",     owner:"FESTIVAL PROPERTIES INC",       priorVal:8658515,  prelim:9677723,  prelimAppr:9677723,  finalAppr:7000000,  finalMkt:7000000,  taxRate:.02204279, status:"None" },
+  { id:"6", cad:"Fort Bend", account:"R73817",        address:"1903 TEXAS PKWY",   owner:"FESTIVAL PROPERTIES - Silvestri",priorVal:3912114, prelim:7624325,  prelimAppr:7624325,  finalAppr:null,     finalMkt:null,     taxRate:.02204279, status:"Arbitration" },
+  { id:"7", cad:"Brazoria",  account:"175159",        address:"1216 FM 1462",      owner:"FESTIVAL PROPERTIES INC",       priorVal:4379715,  prelim:4528810,  prelimAppr:4528810,  finalAppr:2500000,  finalMkt:2500000,  taxRate:.02204279, status:"None" },
+  { id:"8", cad:"Harris",    account:"0341980000008", address:"3316 SHAVER ST",    owner:"FESTIVAL PROPERTIES INC",       priorVal:5532800,  prelim:5983319,  prelimAppr:5983319,  finalAppr:5000000,  finalMkt:5000000,  taxRate:.02204279, status:"None" },
+];
+
+function fmt(n) {
+  if (n === null || n === undefined || n === "") return "";
+  return "$" + Math.round(n).toLocaleString();
+}
+
+function calcRow(r) {
+  const pa = r.prelimAppr ?? r.prelim;
+  const fa = r.finalAppr;
+  const fm = r.finalMkt;
+  const pm = r.prelim;
+  const pct = (pa && fa !== null) ? ((fa - pa) / pa * 100).toFixed(2) + "%" : "";
+  const mktRed = (pm !== null && fm !== null && fm < pm) ? Math.round(pm - fm) : 0;
+  const apprDiff = (pa !== null && fa !== null && pa > fa) ? Math.round(pa - fa) : 0;
+  const taxSavings = (apprDiff > 0 && r.taxRate > 0) ? Math.round(apprDiff * r.taxRate) : 0;
+  const isReduced = r.priorVal && fa !== null && fa < r.priorVal;
+  const autoStatus = isReduced && r.status === "None" ? "Reduced Below Last Year" : r.status;
+  return { pct, mktRed, taxSavings, isReduced, autoStatus };
+}
+
+export default function App() {
+  const [rows, setRows] = useState(DEMO.map(r => ({...r})));
+  const [activeClient] = useState("Silvestri Investments");
+
+  const th = { background: NAVY, color: "#fff", padding: "7px 8px", fontSize: 11, fontWeight: 500, textAlign: "left", whiteSpace: "nowrap" };
+  const td = (extra = {}) => ({ padding: "4px 7px", fontSize: 11.5, borderBottom: "1px solid #eee", verticalAlign: "middle", ...extra });
+
+  const totalReduced = rows.filter(r => { const {isReduced} = calcRow(r); return isReduced; }).length;
+  const totalSavings = rows.reduce((s, r) => s + calcRow(r).taxSavings, 0);
+  const lit = rows.filter(r => r.status === "Active Litigation").length;
+  const arb = rows.filter(r => r.status === "Arbitration").length;
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif", display: "flex", height: "100vh", overflow: "hidden" }}>
+      {/* Sidebar */}
+      <div style={{ width: 200, background: NAVY, color: "#fff", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div style={{ padding: "16px 14px 10px", borderBottom: "1px solid rgba(255,255,255,.12)" }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Property Tax Ledger</div>
+          <div style={{ fontSize: 10, opacity: .6, marginTop: 3 }}>Lane Property Tax Advocates</div>
+        </div>
+        <div style={{ flex: 1, padding: "8px 0" }}>
+          <div style={{ padding: "9px 14px", fontSize: 12, borderLeft: "3px solid " + GOLD, background: "rgba(255,255,255,.13)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontWeight: 600 }}>Silvestri Investments</span>
+          </div>
+          <div style={{ padding: "6px 10px 6px 28px", fontSize: 11, display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,.12)", borderLeft: "3px solid " + GOLD }}>
+            <span style={{ fontSize: 10, opacity: .6 }}>📁</span>
+            <span>2025</span>
+            <span style={{ fontSize: 9, opacity: .4, marginLeft: 2 }}>{rows.length}</span>
+          </div>
+          <div style={{ padding: "4px 10px 6px 28px", fontSize: 10, color: "rgba(255,255,255,.4)" }}>+ add year / folder</div>
+        </div>
+        <div style={{ padding: "10px 10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <button style={{ background: GOLD, color: "#000", border: "none", borderRadius: 5, padding: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ New Client</button>
+          <button style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 5, padding: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>⬆ Import Excel / CSV</button>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ flex: 1, overflow: "auto", padding: 18 }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 700, color: NAVY }}>{activeClient}</span>
+            <span style={{ display: "inline-block", background: GOLD, color: "#000", fontSize: 9, fontWeight: 700, borderRadius: 3, padding: "1px 5px", marginLeft: 6, verticalAlign: "middle" }}>2025</span>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button style={{ background: NAVY, color: "#fff", border: "none", borderRadius: 5, padding: "5px 11px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>↓ Export Excel</button>
+            <button style={{ background: "#dce3ec", color: NAVY, border: "none", borderRadius: 5, padding: "5px 11px", fontSize: 11, cursor: "pointer" }}>⚙ Edit Folder</button>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginBottom: 14 }}>
+          {[
+            { label: "Total Accounts",   value: rows.length },
+            { label: "Accounts Reduced", value: totalReduced },
+            { label: "Active Litigation",value: lit },
+            { label: "Arbitration",      value: arb },
+            { label: "Total Value Reduced", value: rows.reduce((s,r)=>{ const b=r.priorVal,f=r.finalAppr; return s+(b&&f&&f<b?b-f:0); },0) > 0 ? fmt(rows.reduce((s,r)=>{ const b=r.priorVal,f=r.finalAppr; return s+(b&&f&&f<b?b-f:0); },0)) : "$0" },
+          ].map(k => (
+            <div key={k.label} style={{ background: NAVY, color: "#fff", borderRadius: 7, padding: "11px 13px" }}>
+              <div style={{ fontSize: 9, opacity: .65, marginBottom: 3, textTransform: "uppercase", letterSpacing: .4 }}>{k.label}</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{k.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, borderBottom: "2px solid #ddd", marginBottom: 14 }}>
+          <div style={{ padding: "7px 18px", fontSize: 12, fontWeight: 600, background: NAVY, color: "#fff", borderRadius: "6px 6px 0 0", marginBottom: -2, borderBottom: "2px solid " + NAVY, cursor: "pointer" }}>Account Ledger</div>
+          <div style={{ padding: "7px 18px", fontSize: 12, color: "#666", cursor: "pointer" }}>Summary View</div>
+        </div>
+
+        {/* Toolbar */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input placeholder="Search address, owner, account..." style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 9px", fontSize: 12, width: 220 }} readOnly />
+          <select style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}><option>All</option></select>
+          <select style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}><option>All</option></select>
+          <select style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12, width: 180 }}><option>Standard View</option></select>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            <button style={{ background: NAVY, color: "#fff", border: "none", borderRadius: 5, padding: "5px 11px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>📋 Paste from Excel</button>
+            <button style={{ background: NAVY, color: "#fff", border: "none", borderRadius: 5, padding: "5px 11px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>+ Add Row</button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowX: "auto", border: "1px solid #ddd", borderRadius: 6, background: "#fff", maxHeight: "calc(100vh - 320px)", overflowY: "auto" }}>
+          <table style={{ borderCollapse: "collapse", fontSize: 11.5, width: "100%", minWidth: 1200 }}>
+            <thead>
+              <tr>
+                {["#","CAD","Account #","Address","Owner","Prior Value","Prelim Mkt","Prelim Appr","Final Appr","Final Mkt","Mkt Red *","% Chg *","Tax Rate","Tax Savings *","Status"].map(h => (
+                  <th key={h} style={th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const { pct, mktRed, taxSavings, isReduced, autoStatus } = calcRow(r);
+                const sc = STATUS_COLORS[autoStatus] || {};
+                const bg = sc.bg || (i % 2 === 0 ? "#fff" : "#f8f9fb");
+                const pv = parseFloat(pct) || 0;
+                const pctColor = pct ? (pv < 0 ? "#155724" : pv > 0 ? "#721c24" : "#555") : "#555";
+                return (
+                  <tr key={r.id} style={{ background: bg, borderBottom: "1px solid #eee" }}>
+                    <td style={td({ textAlign: "center", color: "#aaa", width: 34 })}>{i + 1}</td>
+                    <td style={td()}>{r.cad}</td>
+                    <td style={td({ fontFamily: "monospace", fontSize: 10 })}>{r.account}</td>
+                    <td style={td({ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" })}>{r.address}</td>
+                    <td style={td({ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" })}>{r.owner}</td>
+                    <td style={td({ textAlign: "right" })}>{fmt(r.priorVal)}</td>
+                    <td style={td({ textAlign: "right" })}>{fmt(r.prelim)}</td>
+                    <td style={td({ textAlign: "right" })}>{fmt(r.prelimAppr)}</td>
+                    <td style={td({ textAlign: "right" })}>{fmt(r.finalAppr)}{isReduced && <span style={{ color: "#155724", fontWeight: 900, fontSize: 12, marginLeft: 2 }}>↓</span>}</td>
+                    <td style={td({ textAlign: "right" })}>{fmt(r.finalMkt)}</td>
+                    <td style={td({ textAlign: "right", fontWeight: 600, color: "#155724", background: "rgba(0,33,71,.03)" })}>{mktRed > 0 ? fmt(mktRed) : ""}</td>
+                    <td style={td({ textAlign: "right", fontWeight: 600, color: pctColor, background: "rgba(0,33,71,.03)" })}>{pct}</td>
+                    <td style={td({ textAlign: "right" })}>{r.taxRate}</td>
+                    <td style={td({ textAlign: "right", fontWeight: 600, color: "#155724", background: "rgba(0,33,71,.03)" })}>{taxSavings > 0 ? fmt(taxSavings) : ""}</td>
+                    <td style={td()}>
+                      {sc.bg
+                        ? <span style={{ background: sc.bg, border: "1px solid " + sc.border, color: sc.text, borderRadius: 4, padding: "2px 7px", fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>{autoStatus}</span>
+                        : <span style={{ color: "#aaa", fontSize: 10 }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: NAVY, color: "#fff", fontWeight: 700 }}>
+                <td style={{ padding: "7px 8px", textAlign: "left", fontSize: 11 }} colSpan={5}>TOTALS — {rows.length} accounts</td>
+                <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11 }}>{fmt(rows.reduce((s,r)=>s+(r.priorVal||0),0))}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11 }}>{fmt(rows.reduce((s,r)=>s+(r.prelim||0),0))}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11 }}>{fmt(rows.reduce((s,r)=>s+(r.prelimAppr||0),0))}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11 }}>{fmt(rows.reduce((s,r)=>s+(r.finalAppr||0),0))}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11 }}>{fmt(rows.reduce((s,r)=>s+(r.finalMkt||0),0))}</td>
+                <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11, color: "#a8d5b5" }}>{fmt(rows.reduce((s,r)=>s+calcRow(r).mktRed,0))}</td>
+                <td style={{ padding: "7px 8px" }}></td>
+                <td style={{ padding: "7px 8px" }}></td>
+                <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11, color: "#a8d5b5" }}>{fmt(totalSavings)}</td>
+                <td style={{ padding: "7px 8px" }}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 14, marginTop: 9, flexWrap: "wrap", alignItems: "center" }}>
+          {Object.entries(STATUS_COLORS).map(([lbl, c]) => (
+            <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ width: 13, height: 13, background: c.bg, border: "2px solid " + c.border, borderRadius: 3 }}></div>
+              <span style={{ fontSize: 11, color: "#555" }}>{lbl}</span>
+            </div>
+          ))}
+          <span style={{ fontSize: 11, color: "#888", marginLeft: 6 }}>↓ = reduced &nbsp; * = auto-calculated</span>
+        </div>
+      </div>
+    </div>
+  );
+}
