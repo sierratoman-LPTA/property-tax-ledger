@@ -299,10 +299,9 @@ function recalcRow(r){
     r.mktRed=String(Math.round(prelim-finalMkt));
   } else {r.mktRed='';}
 
-  // Tax Savings: (Prelim Appr − Final Appr) × Tax Rate
-  // Tax rate entered as decimal (e.g. 0.02204279) — use as-is
+  // Tax Savings: (Prelim Appr − Final Appr) × Tax Rate (rate entered as decimal e.g. 0.02204279)
   var apprBase = prelimAppr !== null ? prelimAppr : prelim;
-  var apprDiff = (apprBase !== null && finalAppr !== null && apprBase > finalAppr) ? Math.round(apprBase - finalAppr) : 0;
+  var apprDiff = (apprBase !== null && finalAppr !== null && apprBase > finalAppr) ? (apprBase - finalAppr) : 0;
   var rate = parseFloat(r.taxRate);
   if(apprDiff > 0 && !isNaN(rate) && rate > 0){
     r.taxSavings = String(Math.round(apprDiff * rate));
