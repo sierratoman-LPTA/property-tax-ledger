@@ -167,10 +167,107 @@ tfoot td.tl{text-align:left}
 .btn-lock{border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.3px}
 .btn-lock.locked{background:#dc3545;color:#fff;}
 .btn-lock.unlocked{background:#28a745;color:#fff;}
+
+/* ── Mobile Responsive ── */
+@media(max-width:768px){
+  /* Hide sidebar — replaced by bottom nav */
+  #sidebar{display:none!important}
+  #app{flex-direction:column}
+  #main{padding:0;overflow:auto;padding-bottom:70px}
+
+  /* Mobile top bar */
+  .mob-topbar{display:flex!important;position:sticky;top:0;z-index:50;background:var(--navy);padding:10px 14px;align-items:center;justify-content:space-between;border-bottom:3px solid var(--gold)}
+  .mob-topbar img{height:26px}
+  .mob-topbar-title{color:#fff;font-size:12px;font-weight:600;opacity:.8}
+
+  /* Mobile bottom nav */
+  .mob-nav{display:flex!important;position:fixed;bottom:0;left:0;right:0;background:var(--navy);border-top:2px solid var(--gold);z-index:100;height:60px}
+  .mob-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border:none;background:none;color:rgba(255,255,255,.6);font-size:9px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;cursor:pointer;gap:3px;padding:8px 4px}
+  .mob-nav-btn.active{color:var(--gold)}
+  .mob-nav-btn svg,.mob-nav-btn .nav-icon{font-size:18px}
+
+  /* Mobile slide-out client list */
+  .mob-drawer{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5)}
+  .mob-drawer.open{display:flex}
+  .mob-drawer-panel{width:80%;max-width:320px;background:var(--navy);height:100%;overflow-y:auto;padding:20px 0}
+  .mob-drawer-hdr{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px}
+  .mob-drawer-hdr h3{color:#fff;font-size:14px;font-weight:700}
+  .mob-drawer-item{padding:12px 16px;color:#fff;font-size:13px;border-left:3px solid transparent;cursor:pointer}
+  .mob-drawer-item:hover,.mob-drawer-item.active{background:rgba(255,255,255,.08);border-left-color:var(--gold)}
+  .mob-drawer-sub{padding:8px 16px 8px 28px;color:rgba(255,255,255,.7);font-size:12px;cursor:pointer;border-left:3px solid transparent}
+  .mob-drawer-sub:hover,.mob-drawer-sub.active{background:rgba(255,255,255,.06);border-left-color:var(--gold)}
+
+  /* Command center on mobile */
+  .cc-hero{margin:-0px 0px 16px;padding:20px 16px 16px}
+  .cc-hero h1{font-size:18px}
+  .cc-totals{grid-template-columns:1fr 1fr!important;gap:8px}
+  .cc-grid{grid-template-columns:1fr!important}
+  .cc-card{margin:0}
+
+  /* Content padding */
+  #content{padding:14px}
+
+  /* Ledger desktop notice */
+  .mob-ledger-notice{background:#fff;border-radius:10px;padding:32px 20px;text-align:center;margin:20px 0}
+  .mob-ledger-notice h3{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px}
+  .mob-ledger-notice p{font-size:13px;color:#666;line-height:1.7;margin-bottom:16px}
+  .mob-ledger-notice .desk-icon{font-size:48px;margin-bottom:12px}
+
+  /* Summary view on mobile */
+  .sum-grid{grid-template-columns:1fr!important}
+  .kpi-row{grid-template-columns:1fr 1fr!important;gap:6px}
+  .kpi .val{font-size:15px}
+  .kpi .lbl{font-size:8px}
+
+  /* Tabs on mobile */
+  .tabs{overflow-x:auto;white-space:nowrap}
+  .tab{padding:7px 12px;font-size:11px}
+
+  /* Hide desktop-only elements */
+  .toolbar{flex-wrap:wrap;gap:6px;padding:0 0 8px}
+  .toolbar input{width:100%!important}
+
+  /* Login screen on mobile */
+  .login-box{padding:24px 20px;width:90vw}
+}
+
+@media(min-width:769px){
+  .mob-topbar{display:none}
+  .mob-nav{display:none}
+  .mob-drawer{display:none!important}
+}
 </style>
 </head>
 <body>
 <div id="app">
+  <!-- Mobile top bar -->
+  <div class="mob-topbar" style="display:none">
+    <img id="mobLogo" style="height:26px" alt="Lane"/>
+    <span class="mob-topbar-title" id="mobTitle">Command Center</span>
+    <button onclick="openMobDrawer()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:4px">&#9776;</button>
+  </div>
+
+  <!-- Mobile client drawer -->
+  <div class="mob-drawer" id="mobDrawer" onclick="if(event.target===this)closeMobDrawer()">
+    <div class="mob-drawer-panel">
+      <div class="mob-drawer-hdr"><h3>Navigation</h3></div>
+      <div class="mob-drawer-item" onclick="goHome();closeMobDrawer()">&#8962; Command Center</div>
+      <div id="mobDrawerTree"></div>
+    </div>
+  </div>
+
+  <!-- Mobile bottom nav -->
+  <div class="mob-nav" style="display:none">
+    <button class="mob-nav-btn active" id="mobnav-home" onclick="goHome();setMobNav('home')">
+      <span class="nav-icon">&#8962;</span>Home
+    </button>
+    <button class="mob-nav-btn" id="mobnav-clients" onclick="openMobDrawer()">
+      <span class="nav-icon">&#128100;</span>Clients
+    </button>
+    <button class="mob-nav-btn" id="mobnav-summary" onclick="switchTab('summary');setMobNav('summary')">
+      <span class="nav-icon">&#128202;</span>Summary
+    </button>
+  </div>
   <div id="sidebar">
     <div class="sb-header" onclick="goHome()" style="cursor:pointer" title="Back to Dashboard">
       <img src="data:image/png;base64,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" style="height:32px;display:block;margin-bottom:6px" alt="Lane Property Tax Advocates"/>
@@ -469,13 +566,13 @@ function initLoginScreen(){
 }
 function applySessionUI(){
   var isClient=isClientSession();
-  // Hide staff-only elements in client session
   var hint=document.getElementById('homeHint');
   var footer=document.getElementById('sbFooter');
   var lockBar=document.querySelector('.lock-bar');
   if(hint)hint.style.display=isClient?'none':'';
   if(footer)footer.style.display=isClient?'none':'';
   if(lockBar)lockBar.style.display=isClient?'none':'';
+  setTimeout(syncMobLogo,100);
 }
 function switchLoginTab(mode){
   _loginMode=mode;
@@ -638,14 +735,19 @@ function renderSidebar(){
 }
 
 function toggleExpand(cid){var c=getClient(cid);if(!c)return;c.expanded=c.expanded===false?true:false;saveDB();renderSidebar();}
-function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;renderSidebar();renderMain();}
+function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;renderSidebar();renderMain();var cl=getClient(cid);if(cl)updateMobTitle(cl.name);}
 function selectFolder(cid,fid){
-  // Block client access to unpublished folders
   if(isClientSession()){
     var f=getFolder(cid,fid);
     if(f&&!f.published){showUnpublishedMsg(f.year);return;}
   }
-  activeClientId=cid;activeFolderId=fid;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;renderSidebar();renderMain();
+  activeClientId=cid;activeFolderId=fid;
+  activeTab=isMobile()?'summary':'ledger';
+  filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;
+  renderSidebar();renderMain();
+  var cl=getClient(cid);var fo=getFolder(cid,fid);
+  if(cl&&fo)updateMobTitle(cl.name+' \u00b7 '+fo.year);
+  if(isMobile())setMobNav('summary');
 }
 function togglePublished(cid,fid,val){
   var f=getFolder(cid,fid);if(!f)return;
@@ -668,8 +770,41 @@ function showUnpublishedMsg(year){
   document.body.appendChild(overlay);
 }
 function goHome(){
-  if(isClientSession())return; // clients can't access command center
+  if(isClientSession())return;
   activeClientId=null;activeFolderId=null;renderSidebar();renderDashboard();
+  setMobNav('home');updateMobTitle('Command Center');
+}
+
+// ── Mobile helpers ─────────────────────────────────────────────────────────────
+function isMobile(){return window.innerWidth<=768;}
+function setMobNav(key){
+  ['home','clients','summary'].forEach(function(k){
+    var el=document.getElementById('mobnav-'+k);
+    if(el)el.className='mob-nav-btn'+(k===key?' active':'');
+  });
+}
+function updateMobTitle(t){var el=document.getElementById('mobTitle');if(el)el.textContent=t;}
+function openMobDrawer(){
+  var tree='';
+  var clients=(db.clients||[]);
+  if(isClientSession())clients=clients.filter(function(c){return c.id===_clientSession;});
+  for(var i=0;i<clients.length;i++){
+    var c=clients[i];
+    tree+='<div class="mob-drawer-item'+(activeClientId===c.id&&!activeFolderId?' active':'')+'" onclick="toggleClient(\''+c.id+'\');closeMobDrawer()">&#128193; '+esc(c.name)+'</div>';
+    var folders=c.folders||[];
+    for(var j=folders.length-1;j>=0;j--){
+      var f=folders[j];
+      tree+='<div class="mob-drawer-sub'+(activeFolderId===f.id?' active':'')+'" onclick="selectFolder(\''+c.id+'\',\''+f.id+'\');closeMobDrawer()">'+esc(f.year)+'</div>';
+    }
+  }
+  document.getElementById('mobDrawerTree').innerHTML=tree;
+  document.getElementById('mobDrawer').classList.add('open');
+}
+function closeMobDrawer(){document.getElementById('mobDrawer').classList.remove('open');}
+function syncMobLogo(){
+  var src=document.querySelector('#sidebar img');
+  var ml=document.getElementById('mobLogo');
+  if(src&&ml)ml.src=src.src;
 }
 
 // ── Client CRUD ────────────────────────────────────────────────────────────────
@@ -1660,6 +1795,17 @@ function renderMain(){
 
 function renderTab(){
   var f=getActiveFolder();if(!f)return;var el=document.getElementById('tabContent');
+  // On mobile, ledger tab shows desktop notice
+  if(activeTab==='ledger'&&isMobile()){
+    el.innerHTML='<div class="mob-ledger-notice">'
+      +'<div class="desk-icon">🖥️</div>'
+      +'<h3>Full Ledger — Desktop Required</h3>'
+      +'<p>The account ledger contains detailed spreadsheet data best viewed and edited on a desktop or laptop computer.</p>'
+      +'<p>Switch to the <b>Summary View</b> below for a mobile-friendly overview of this year\'s results.</p>'
+      +'<button class="btn btn-navy" onclick="switchTab(\'summary\')" style="margin-top:4px">View Summary Instead</button>'
+      +'</div>';
+    return;
+  }
   if(activeTab==='ledger'){
     var cadOpts='<option'+(filterCAD==='All'?' selected':'')+'>All</option>';
     var detectedCounties=(f.rows||[]).reduce(function(acc,r){if(r.cad&&acc.indexOf(r.cad)<0)acc.push(r.cad);return acc;},[]).sort();
