@@ -2209,15 +2209,19 @@ function renderClientOverview(cl){
     h+='<div class="cc-stat"><div class="sv green">'+fReduced+'</div><div class="sl">Reduced</div></div>';
     h+='<div class="cc-stat"><div class="sv '+(fLit>0?'red':'')+'">'+fLit+'</div><div class="sl">Litigation</div></div>';
     h+='</div></div>';
-    h+='<div class="cc-card-ftr">';
-    if(!isClientSession()){
-      h+='<span>&#128193; '+(isPublished?'Visible to client':'Hidden from client')+'</span>';
-    } else {
-      h+='<span>&#128193; '+(isPublished?'Click to view report':'Update in progress')+'</span>';
+    var hasFooter=!isClientSession()||(fArb>0||fFormal>0||!isPublished);
+    if(hasFooter){
+      h+='<div class="cc-card-ftr">';
+      if(!isClientSession()){
+        h+='<span style="color:'+(isPublished?'#28a745':'#aaa')+'">'+( isPublished?'&#10003; Visible to client':'&#8203;Hidden from client')+'</span>';
+      } else if(!isPublished){
+        h+='<span style="color:#888">&#128274; Update in progress</span>';
+      }
+      if(fArb>0)h+='<span style="color:#004085">&#9632; '+fArb+' Arb</span>';
+      if(fFormal>0)h+='<span style="color:#9B59B6">&#9632; '+fFormal+' Formal</span>';
+      h+='</div>';
     }
-    if(fArb>0)h+='<span style="color:#004085">&#9632; '+fArb+' Arb</span>';
-    if(fFormal>0)h+='<span style="color:#9B59B6">&#9632; '+fFormal+' Formal</span>';
-    h+='</div></div>';
+    h+='</div>';
   }
 
   h+='</div>';
