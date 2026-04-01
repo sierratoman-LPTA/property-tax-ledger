@@ -104,6 +104,13 @@ tfoot td.tl{text-align:left}
 .empty-state{text-align:center;padding:60px 20px;color:#888}
 .empty-state h2{font-size:18px;margin-bottom:8px;color:#aaa}
 .yr-badge{display:inline-block;background:var(--gold);color:#000;font-size:9px;font-weight:700;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+.lock-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.2);border-top:1px solid rgba(255,255,255,0.08)}
+.lock-status{font-size:10px;font-weight:700;letter-spacing:.4px;display:flex;align-items:center;gap:5px}
+.lock-icon{font-size:13px}
+.btn-lock{border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.3px}
+.btn-lock.locked{background:#dc3545;color:#fff;}
+.btn-lock.unlocked{background:#28a745;color:#fff;}
+.locked-overlay{pointer-events:none;opacity:0.45}
 </style>
 </head>
 <body>
@@ -116,11 +123,30 @@ tfoot td.tl{text-align:left}
     </div>
     <div class="sb-tree" id="sbTree"></div>
     <div class="sb-footer">
-      <button class="btn-sb btn-gold" onclick="openNewClientModal()">+ New Client</button>
-      <button class="btn-sb btn-ghost" onclick="document.getElementById('xlUpload').click()">&#8679; Import Excel / CSV</button>
+      <button class="btn-sb btn-gold" onclick="requireUnlock(openNewClientModal)">+ New Client</button>
+      <button class="btn-sb btn-ghost" onclick="requireUnlock(function(){document.getElementById('xlUpload').click()})">&#8679; Import Excel / CSV</button>
       <input type="file" id="xlUpload" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileUpload(event)"/>
     </div>
+    <div class="lock-bar">
+      <div class="lock-status" id="lockStatus"><span class="lock-icon">🔒</span><span id="lockLabel">LOCKED</span></div>
+      <button class="btn-lock locked" id="lockBtn" onclick="toggleLock()">UNLOCK</button>
+    </div>
   </div>
+
+<!-- Password Modal -->
+<div id="pwModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closePwModal()">
+  <div class="modal-box" style="width:360px;text-align:center" onclick="event.stopPropagation()">
+    <div style="font-size:32px;margin-bottom:8px">🔒</div>
+    <h3 style="margin-bottom:6px">Enter Password to Edit</h3>
+    <p style="margin-bottom:16px;color:#888;font-size:12px">This ledger is locked. Enter the password to enable editing.</p>
+    <input id="pwInput" type="password" placeholder="Password" style="width:100%;border:1px solid #ccc;border-radius:5px;padding:10px;font-size:14px;text-align:center;letter-spacing:2px" onkeydown="if(event.key==='Enter')submitPassword()"/>
+    <div id="pwError" style="color:#dc3545;font-size:11px;margin-top:6px;min-height:16px"></div>
+    <div class="modal-btns" style="justify-content:center;margin-top:14px">
+      <button class="btn" style="background:#eee;color:#333" onclick="closePwModal()">Cancel</button>
+      <button class="btn btn-navy" onclick="submitPassword()">Unlock</button>
+    </div>
+  </div>
+</div>
   <div id="main"><div id="content"><div class="empty-state"><h2>Connecting...</h2><p>Loading live data.</p></div></div></div>
 </div>
 
@@ -251,8 +277,58 @@ var editingClientId=null,editingFolderId=null;
 var pasteRows=[],pasteHdrs=[];
 var fileRows=[],fileHdrs=[],importFileName='';
 var undoStack=[];
+var _unlocked=false;
+var _PASS='798271';  // ← change this to your preferred password
+var _pendingAction=null;
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// ── Lock / Unlock ──────────────────────────────────────────────────────────────
+function requireUnlock(fn){
+  if(_unlocked){fn();return;}
+  _pendingAction=fn;
+  document.getElementById('pwInput').value='';
+  document.getElementById('pwError').textContent='';
+  document.getElementById('pwModal').style.display='flex';
+  setTimeout(function(){document.getElementById('pwInput').focus();},100);
+}
+function submitPassword(){
+  var val=document.getElementById('pwInput').value;
+  if(val===_PASS){
+    _unlocked=true;updateLockUI();
+    document.getElementById('pwModal').style.display='none';
+    if(_pendingAction){var fn=_pendingAction;_pendingAction=null;fn();}
+  } else {
+    document.getElementById('pwError').textContent='Incorrect password. Try again.';
+    document.getElementById('pwInput').value='';
+    document.getElementById('pwInput').focus();
+  }
+}
+function closePwModal(){
+  document.getElementById('pwModal').style.display='none';
+  _pendingAction=null;
+}
+function toggleLock(){
+  if(_unlocked){
+    _unlocked=false;updateLockUI();
+  } else {
+    requireUnlock(function(){});
+  }
+}
+function updateLockUI(){
+  var btn=document.getElementById('lockBtn');
+  var lbl=document.getElementById('lockLabel');
+  var icon=document.querySelector('.lock-icon');
+  if(_unlocked){
+    btn.textContent='LOCK';btn.className='btn-lock unlocked';
+    lbl.textContent='UNLOCKED';icon.textContent='🔓';
+  } else {
+    btn.textContent='UNLOCK';btn.className='btn-lock locked';
+    lbl.textContent='LOCKED';icon.textContent='🔒';
+  }
+}
+function checkLock(){
+  if(!_unlocked){requireUnlock(function(){});return false;}
+  return true;
+}
 var COUNTIES=['Harris','Brazoria','Montgomery','Fort Bend','Galveston','San Jacinto','Other'];
 var STATUS=['None','Active Litigation','Arbitration','Reduced Below Last Year','Completed'];
 var SCLS={'Active Litigation':'lit','Arbitration':'arb','Reduced Below Last Year':'reduced','Completed':'completed'};
@@ -307,6 +383,7 @@ function recalcRow(r){
 // ── Undo ───────────────────────────────────────────────────────────────────────
 function pushUndo(){undoStack.push(JSON.stringify(db));if(undoStack.length>50)undoStack.shift();}
 function undo(){
+  if(!checkLock())return;
   if(!undoStack.length){alert('Nothing to undo.');return;}
   db=JSON.parse(undoStack.pop());saveDB();renderSidebar();
   var f=getActiveFolder();if(f){renderTable();renderKPIs();}else renderMain();
@@ -347,7 +424,7 @@ function renderSidebar(){
           +'<span style="font-size:9px;opacity:.4;margin-left:2px">'+(f.rows?f.rows.length:0)+'</span>'
           +'<button class="sb-del" onclick="event.stopPropagation();delFolder(\''+c.id+'\',\''+f.id+'\')" title="Delete">&#215;</button></div>';
       }
-      html+='<div class="sb-add-folder" onclick="openNewFolderModal(\''+c.id+'\')">&#43; add year / folder</div>';
+      html+='<div class="sb-add-folder" onclick="requireUnlock(function(){openNewFolderModal(\''+c.id+'\')})">&#43; add year / folder</div>';
     }
   }
   el.innerHTML=html;
@@ -370,6 +447,7 @@ function saveClient(){
   var name=document.getElementById('cm_name').value.trim();
   var firm=document.getElementById('cm_firm').value.trim();
   if(!name){alert('Please enter a client name.');return;}
+  if(!checkLock())return;
   if(editingClientId){var c=getClient(editingClientId);if(c){c.name=name;c.firm=firm;}}
   else{
     var yr=String(new Date().getFullYear());
@@ -388,7 +466,7 @@ function editClientModal(cid){
   document.getElementById('clientModal').style.display='flex';
 }
 function delClient(cid){
-  var c=getClient(cid);if(!c)return;
+  var c=getClient(cid);if(!c)return;if(!checkLock())return;
   if(!confirm('Delete "'+c.name+'" and ALL data?'))return;
   db.clients=db.clients.filter(function(x){return x.id!==cid;});
   if(activeClientId===cid){activeClientId=null;activeFolderId=null;}
@@ -414,6 +492,7 @@ function openNewFolderModal(cid){
 }
 function saveFolder(){
   var year=document.getElementById('fm_year').value.trim();if(!year){alert('Please enter a tax year.');return;}
+  if(!checkLock())return;
   var lbl=defaultLabels(year);
   var labels={
     prior:document.getElementById('fm_prior').value.trim()||lbl.prior,
@@ -442,7 +521,7 @@ function editFolderModal(cid,fid){
   document.getElementById('folderModal').style.display='flex';
 }
 function delFolder(cid,fid){
-  var c=getClient(cid);if(!c)return;var f=getFolder(cid,fid);if(!f)return;
+  var c=getClient(cid);if(!c)return;var f=getFolder(cid,fid);if(!f)return;if(!checkLock())return;
   if(!confirm('Delete "'+f.year+'" folder and all data?'))return;
   c.folders=c.folders.filter(function(x){return x.id!==fid;});
   if(activeFolderId===fid){activeFolderId=c.folders&&c.folders.length?c.folders[0].id:null;}
@@ -450,14 +529,14 @@ function delFolder(cid,fid){
 }
 
 // ── Row CRUD ───────────────────────────────────────────────────────────────────
-function addRow(){var f=getActiveFolder();if(!f)return;pushUndo();if(!f.rows)f.rows=[];f.rows.push(emptyRow());saveDB();renderTable();renderKPIs();}
+function addRow(){var f=getActiveFolder();if(!f)return;if(!checkLock())return;pushUndo();if(!f.rows)f.rows=[];f.rows.push(emptyRow());saveDB();renderTable();renderKPIs();}
 function removeRow(id){
-  var f=getActiveFolder();if(!f)return;pushUndo();
+  var f=getActiveFolder();if(!f)return;if(!checkLock())return;pushUndo();
   f.rows=f.rows.filter(function(r){return r.id!==id;});
   saveDB();renderTable();renderKPIs();
 }
 function updateField(id,field,val){
-  var f=getActiveFolder();if(!f)return;
+  var f=getActiveFolder();if(!f)return;if(!checkLock())return;
   var r=(f.rows||[]).filter(function(x){return x.id===id;})[0];if(!r)return;
   pushUndo();r[field]=val;recalcRow(r);saveDB();renderKPIs();
   var tr=document.querySelector('tr[data-id="'+id+'"]');
@@ -569,6 +648,7 @@ function onPasteInput(){
 function updatePastePreview(){buildPreview('pastePreview',getMap('pc_',pasteHdrs),pasteRows);}
 function importPaste(){
   var f=getActiveFolder();if(!f){alert('Please select a year folder first.');return;}
+  if(!checkLock())return;
   var map=getMap('pc_',pasteHdrs);if(!map.length){alert('Please map at least one column.');return;}
   pushUndo();
   var newRows=applyMap(pasteRows,map);
@@ -622,6 +702,7 @@ function processFileData(data){
 function updateFilePreview(){buildPreview('filePreview',getMap('fc_',fileHdrs),fileRows);}
 function importFile(){
   var map=getMap('fc_',fileHdrs);if(!map.length){alert('Please map at least one column.');return;}
+  if(!checkLock())return;
   pushUndo();
   var newRows=applyMap(fileRows,map);
   var target=document.getElementById('fileTargetSel').value;
@@ -915,7 +996,7 @@ function renderTable(){
     else tfoot+='<td></td>';
   }
   tfoot+='<td></td></tr></tfoot>';
-  document.getElementById('tableWrap').innerHTML='<div class="tbl-wrap"><table>'+thead+tbody+tfoot+'</table></div>';
+  document.getElementById('tableWrap').innerHTML='<div class="tbl-wrap'+((!_unlocked)?' locked-overlay':'')+'"><table>'+thead+tbody+tfoot+'</table></div>';
 }
 
 // ── Summary ────────────────────────────────────────────────────────────────────
@@ -955,8 +1036,8 @@ function renderMain(){
     +'<span style="font-size:12px;color:#888;margin-left:8px">'+esc(cl?cl.firm||'':'')+'</span></div>'
     +'<div style="display:flex;gap:6px">'
     +'<button class="btn btn-sm btn-navy" onclick="exportExcel()">&#8595; Export Excel</button>'
-    +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')">&#9881; Edit Folder</button>'
-    +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="editClientModal(\''+activeClientId+'\')">&#9881; Edit Client</button>'
+    +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="requireUnlock(function(){editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')})">&#9881; Edit Folder</button>'
+    +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="requireUnlock(function(){editClientModal(\''+activeClientId+'\')})">&#9881; Edit Client</button>'
     +'</div></div>'
     +'<div class="tabs">'
     +'<button class="tab'+(activeTab==='ledger'?' active':'')+'" onclick="switchTab(\'ledger\')">Account Ledger</button>'
@@ -989,9 +1070,9 @@ function renderTab(){
       +'<option value="full"'+(viewMode==='full'?' selected':'')+'>Full View (+ property/type cols)</option>'
       +'</select>'
       +'<div style="margin-left:auto;display:flex;gap:6px">'
-      +'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="undo()" title="Undo last change">&#8630; Undo</button>'
-      +'<button class="btn btn-navy btn-sm" onclick="openPasteModal()">&#128203; Paste from Excel</button>'
-      +'<button class="btn btn-navy btn-sm" onclick="addRow()">+ Add Row</button>'
+      +'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="requireUnlock(undo)" title="Undo last change">&#8630; Undo</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="requireUnlock(openPasteModal)">&#128203; Paste from Excel</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="requireUnlock(addRow)">+ Add Row</button>'
       +'</div></div>'
       +'<div id="tableWrap"></div>'
       +'<div class="legend">'
