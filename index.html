@@ -290,7 +290,7 @@ dbRef.on('value',function(snap){
   var f=getActiveFolder();
   if(f){renderTable();renderKPIs();}
   else renderMain();
-  setSyncDot('ok');
+  setTimeout(function(){setSyncDot('ok');},0);
 });
 
 // ── State ──────────────────────────────────────────────────────────────────────
