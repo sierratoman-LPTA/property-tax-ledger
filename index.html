@@ -793,38 +793,56 @@ function undo(){
 }
 
 // ── Sort ───────────────────────────────────────────────────────────────────────
-function sortBy(k){
-  // Check if already in sortLevels
-  var existing=-1;
-  for(var i=0;i<sortLevels.length;i++){if(sortLevels[i].key===k){existing=i;break;}}
-  if(existing===0){
-    // Already primary — toggle direction
-    sortLevels[0].dir*=-1;
-    sortDir=sortLevels[0].dir;sortKey=k;
-  } else if(existing>0){
-    // Already secondary/tertiary — remove it
-    sortLevels.splice(existing,1);
-  } else {
-    // New — add as next level (default ascending)
-    if(sortLevels.length>=3)sortLevels.pop();
-    sortLevels.push({key:k,dir:1});
-    if(sortLevels.length===1){sortKey=k;sortDir=1;}
-  }
-  renderTable();
+var SORT_FIELDS=[
+  {k:'',label:'— None —'},
+  {k:'address',label:'Address'},
+  {k:'owner',label:'Owner'},
+  {k:'account',label:'Account #'},
+  {k:'cad',label:'CAD / County'},
+  {k:'status',label:'Status'},
+  {k:'priorVal',label:'Prior Value'},
+  {k:'prelim',label:'Prelim Market Value'},
+  {k:'prelimAppr',label:'Prelim Appr Value'},
+  {k:'finalAppr',label:'Final Appr Value'},
+  {k:'finalMkt',label:'Final Market Value'},
+  {k:'mktRed',label:'Market Reduction'},
+  {k:'pctChange',label:'% Change'},
+  {k:'taxSavings',label:'Tax Savings'},
+];
+var MV_SORT_KEYS=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed','taxSavings','pctChange'];
+
+// sortLevels = [{key, dir}, {key, dir}, {key, dir}] — always 3 slots, key='' means unused
+function initSortLevels(){
+  while(sortLevels.length<3)sortLevels.push({key:'',dir:1});
 }
+
+function sortBy(k){
+  // Column header click: set as primary sort, toggle if already primary
+  initSortLevels();
+  if(sortLevels[0].key===k){
+    sortLevels[0].dir*=-1;
+  } else {
+    sortLevels[0].key=k;
+    sortLevels[0].dir=1;
+  }
+  sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;
+  renderTable();
+  renderSortPanel();
+}
+
 function getValForSort(r,key){
-  var mvK=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed','taxSavings'];
   var v=r[key]||'';
-  if(mvK.indexOf(key)>=0)return parseMV(v)||0;
-  if(key==='pctChange')return parseFloat(v)||0;
+  if(MV_SORT_KEYS.indexOf(key)>=0)return parseMV(v)||0;
   return String(v).toLowerCase();
 }
+
 function sortedRows(rows){
-  var levels=sortLevels.length?sortLevels:(sortKey?[{key:sortKey,dir:sortDir}]:[]);
-  if(!levels.length)return rows;
+  initSortLevels();
+  var active=sortLevels.filter(function(l){return l.key!=='';});
+  if(!active.length)return rows;
   return rows.slice().sort(function(a,b){
-    for(var i=0;i<levels.length;i++){
-      var lv=levels[i];
+    for(var i=0;i<active.length;i++){
+      var lv=active[i];
       var av=getValForSort(a,lv.key),bv=getValForSort(b,lv.key);
       if(av<bv)return -1*lv.dir;
       if(av>bv)return lv.dir;
@@ -832,65 +850,63 @@ function sortedRows(rows){
     return 0;
   });
 }
-function setSortDir(idx,dir){
-  if(!sortLevels[idx])return;
-  sortLevels[idx].dir=dir;
-  if(idx===0){sortDir=dir;sortKey=sortLevels[0].key;}
-  renderSortPanel(); // update panel buttons only
-  renderTable();     // re-sort the data
-  // Keep panel open
-  _sortPanelOpen=true;
-  setTimeout(function(){
-    var sp=document.getElementById('sortPanel');
-    if(sp){sp.classList.add('open');renderSortPanel();}
-  },15);
-}
-function removeSortLevel(idx){
-  sortLevels.splice(idx,1);
-  if(sortLevels.length){sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;}
-  else{sortKey=null;sortDir=1;}
+
+function onSortFieldChange(idx,val){
+  initSortLevels();
+  sortLevels[idx].key=val;
+  if(idx===0){sortKey=val||null;sortDir=sortLevels[0].dir;}
   renderTable();
-  setTimeout(function(){
-    var sp=document.getElementById('sortPanel');
-    if(sp&&sortLevels.length)sp.classList.add('open');
-  },10);
+  renderSortPanel();
 }
+
+function onSortDirChange(idx,dir){
+  initSortLevels();
+  sortLevels[idx].dir=parseInt(dir);
+  if(idx===0&&sortLevels[0].key){sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;}
+  renderTable();
+  // Don't re-render panel — direction select already shows correct value
+}
+
+function clearAllSorts(){
+  sortLevels=[{key:'',dir:1},{key:'',dir:1},{key:'',dir:1}];
+  sortKey=null;sortDir=1;
+  renderTable();
+  renderSortPanel();
+}
+
 function renderSortPanel(){
   var sp=document.getElementById('sortPanel');
   if(!sp)return;
-  var FIELD_NAMES={cad:'CAD',account:'Account #',address:'Address',propName:'Property Name',owner:'Owner',priorVal:'Prior Value',prelim:'Prelim Market',prelimAppr:'Prelim Appr',finalAppr:'Final Appr',finalMkt:'Final Market',mktRed:'Mkt Reduction',pctChange:'% Change',taxSavings:'Tax Savings',status:'Status'};
-  var MV_FIELDS=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed','taxSavings','pctChange'];
-  var inner='<div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Sort Order <span style="font-weight:400;text-transform:none">(up to 3 levels)</span></div>';
-  if(sortLevels.length===0){
-    inner+='<div style="color:#aaa;font-size:12px;padding:8px 0 4px">Click any column header to add a sort level.</div>';
-  } else {
-    for(var si=0;si<sortLevels.length;si++){
-      var lv=sortLevels[si];
-      var nm=FIELD_NAMES[lv.key]||lv.key;
-      var badge=si===0?'#002147':si===1?'#34495e':'#7f8c8d';
-      var isNum=MV_FIELDS.indexOf(lv.key)>=0;
-      var lblAsc=isNum?'Low → High':'A → Z';
-      var lblDesc=isNum?'High → Low':'Z → A';
-      var ascActive=lv.dir===1;
-      inner+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:10px 12px;background:#f8f9fb;border-radius:8px;border-left:3px solid '+badge+'">';
-      inner+='<span style="background:'+badge+';color:#fff;font-size:9px;font-weight:700;min-width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">'+(si+1)+'</span>';
-      inner+='<span style="flex:1;font-size:12px;font-weight:600;color:#333">'+nm+'</span>';
-      inner+='<div style="display:flex;border:1px solid #ddd;border-radius:5px;overflow:hidden">';
-      inner+='<button onclick="setSortDir('+si+',1)" style="padding:4px 10px;font-size:11px;font-weight:600;border:none;cursor:pointer;background:'+(ascActive?'#002147':'#fff')+';color:'+(ascActive?'#fff':'#999')+'">'+lblAsc+'</button>';
-      inner+='<button onclick="setSortDir('+si+',-1)" style="padding:4px 10px;font-size:11px;font-weight:600;border:none;border-left:1px solid #ddd;cursor:pointer;background:'+(!ascActive?'#002147':'#fff')+';color:'+(!ascActive?'#fff':'#999')+'">'+lblDesc+'</button>';
-      inner+='</div>';
-      inner+='<button onclick="removeSortLevel('+si+')" style="background:none;border:1px solid #ddd;border-radius:5px;color:#bbb;cursor:pointer;font-size:14px;padding:2px 8px;line-height:1;flex-shrink:0">×</button>';
-      inner+='</div>';
+  initSortLevels();
+  var labels=['1st Sort','2nd Sort','3rd Sort'];
+  var badges=['#002147','#34495e','#7f8c8d'];
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<span style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">Multi-Level Sort</span>'
+    +'<button onclick="clearAllSorts()" style="font-size:10px;color:#aaa;background:none;border:1px solid #eee;border-radius:4px;padding:2px 8px;cursor:pointer">Clear All</button>'
+    +'</div>';
+  for(var si=0;si<3;si++){
+    var lv=sortLevels[si];
+    var isNum=MV_SORT_KEYS.indexOf(lv.key)>=0;
+    var dirOpts='';
+    if(isNum){
+      dirOpts+='<option value="1"'+(lv.dir===1?' selected':'')+'>Low → High</option>';
+      dirOpts+='<option value="-1"'+(lv.dir===-1?' selected':'')+'>High → Low</option>';
+    } else {
+      dirOpts+='<option value="1"'+(lv.dir===1?' selected':'')+'>A → Z</option>';
+      dirOpts+='<option value="-1"'+(lv.dir===-1?' selected':'')+'>Z → A</option>';
     }
-    inner+='<button onclick="sortLevels=[];sortKey=null;sortDir=1;renderTable()" style="font-size:11px;color:#aaa;background:none;border:none;cursor:pointer;text-decoration:underline;margin-top:4px;display:block">Clear all sorts</button>';
+    var fieldOpts='';
+    for(var fi=0;fi<SORT_FIELDS.length;fi++){
+      var sf=SORT_FIELDS[fi];
+      fieldOpts+='<option value="'+sf.k+'"'+(lv.key===sf.k?' selected':'')+'>'+sf.label+'</option>';
+    }
+    html+='<div style="display:grid;grid-template-columns:70px 1fr 120px;gap:6px;align-items:center;margin-bottom:7px;padding:8px 10px;background:#f8f9fb;border-radius:7px;border-left:3px solid '+badges[si]+'">';
+    html+='<span style="font-size:10px;font-weight:700;color:'+badges[si]+'">'+labels[si]+'</span>';
+    html+='<select onchange="onSortFieldChange('+si+',this.value)" style="border:1px solid #ccc;border-radius:5px;padding:4px 6px;font-size:11px;background:#fff;color:#222;width:100%">'+fieldOpts+'</select>';
+    html+='<select onchange="onSortDirChange('+si+',this.value)" '+(lv.key?'':'disabled')+' style="border:1px solid #ccc;border-radius:5px;padding:4px 6px;font-size:11px;background:#fff;color:'+(lv.key?'#222':'#aaa')+';width:100%">'+dirOpts+'</select>';
+    html+='</div>';
   }
-  sp.innerHTML=inner;
-}
-function toggleSortLevelDir(idx){
-  if(!sortLevels[idx])return;
-  sortLevels[idx].dir*=-1;
-  if(idx===0){sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;}
-  renderTable();
+  sp.innerHTML=html;
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -900,8 +916,13 @@ function toggleSortPanel(){
   _sortPanelOpen=!_sortPanelOpen;
   var sp=document.getElementById('sortPanel');
   if(!sp)return;
-  if(_sortPanelOpen){renderSortPanel();sp.classList.add('open');}
-  else{sp.classList.remove('open');}
+  if(_sortPanelOpen){
+    initSortLevels();
+    renderSortPanel();
+    sp.classList.add('open');
+  } else {
+    sp.classList.remove('open');
+  }
 }
 function onSbSearch(val){
   clearTimeout(_sbSearchTimer);
@@ -1045,7 +1066,7 @@ function toggleExpand(cid){
   c.expanded=!currExp;
   saveDB();renderSidebar();
 }
-function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;sortLevels=[];renderSidebar();renderMain();var cl=getClient(cid);if(cl)updateMobTitle(cl.name);}
+function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;sortLevels=[{key:'',dir:1},{key:'',dir:1},{key:'',dir:1}];renderSidebar();renderMain();var cl=getClient(cid);if(cl)updateMobTitle(cl.name);}
 function selectFolder(cid,fid){
   if(isClientSession()){
     var f=getFolder(cid,fid);
@@ -1053,7 +1074,7 @@ function selectFolder(cid,fid){
   }
   activeClientId=cid;activeFolderId=fid;
   activeTab=isMobile()?'summary':'ledger';
-  filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;sortLevels=[];
+  filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;sortLevels=[{key:'',dir:1},{key:'',dir:1},{key:'',dir:1}];
   renderSidebar();renderMain();
   var cl=getClient(cid);var fo=getFolder(cid,fid);
   if(cl&&fo)updateMobTitle(cl.name+' \u00b7 '+fo.year);
@@ -2856,8 +2877,8 @@ function renderTab(){
       +'<input placeholder="Search address, owner, account..." value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderTable()"/>'
       +'<select onchange="filterCAD=this.value;renderTable()">'+cadOpts+'</select>'
       +'<select onchange="filterStatus=this.value;renderTable()">'+stOpts+'</select>'
-      +'<button onclick="toggleSortPanel()" class="btn btn-sm" id="sortBtn" style="background:'+(sortLevels.length?'var(--navy)':'#eee')+';color:'+(sortLevels.length?'#fff':'#555')+';font-size:11px;position:relative" title="Multi-sort">&#9651; Sort'+(sortLevels.length?' ('+sortLevels.length+')':'')+'</button>'
-      +'<div id="sortPanel" style="position:absolute;top:38px;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>'
+      +'<button onclick="toggleSortPanel()" class="btn btn-sm" id="sortBtn" style="background:'+(sortLevels.filter(function(l){return l.key;}).length?'var(--navy)':'#eee')+';color:'+(sortLevels.filter(function(l){return l.key;}).length?'#fff':'#555')+';font-size:11px;position:relative" title="Multi-sort">&#9651; Sort'+(sortLevels.filter(function(l){return l.key;}).length?' ('+sortLevels.filter(function(l){return l.key;}).length+')':'')+'</button>'
+      +'<div id="sortPanel" style="position:absolute;top:38px;left:0;width:560px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>'
       +'</div>'
       +'<button onclick="viewMode=viewMode===\'full\'?\'basic\':\'full\';renderTable()" class="btn btn-sm" style="background:'+(viewMode==='full'?'var(--navy)':'#eee')+';color:'+(viewMode==='full'?'#fff':'#555')+';font-size:11px" title="Toggle expanded columns">&#8644; '+(viewMode==='full'?'Full View':'Expand')+'</button>'
       +'<div style="margin-left:auto;display:flex;gap:6px">'
