@@ -28,6 +28,19 @@ body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222}
 .sb-folder .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-add-folder{padding:4px 10px 6px 28px;font-size:10px;color:rgba(255,255,255,.4);cursor:pointer}
 .sb-add-folder:hover{color:rgba(255,255,255,.8)}
+/* ── Sidebar Search ── */
+.sb-search-wrap{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sb-search-input{width:100%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:6px 10px 6px 28px;font-size:11px;color:#fff;outline:none;box-sizing:border-box}
+.sb-search-input::placeholder{color:rgba(255,255,255,.4)}
+.sb-search-input:focus{background:rgba(255,255,255,.15);border-color:var(--gold)}
+.sb-search-icon{position:absolute;left:18px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.4);font-size:11px;pointer-events:none}
+.sb-search-results{background:rgba(0,0,0,.25);border-bottom:1px solid rgba(255,255,255,.1);max-height:50vh;overflow-y:auto}
+.sb-result-group{padding:5px 10px 2px;font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.8px}
+.sb-result-item{padding:7px 12px;font-size:11px;color:rgba(255,255,255,.85);cursor:pointer;display:flex;flex-direction:column;gap:1px;border-left:3px solid transparent}
+.sb-result-item:hover{background:rgba(255,255,255,.08);border-left-color:var(--gold)}
+.sb-result-item .ri-main{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-result-item .ri-sub{font-size:9px;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-result-empty{padding:12px;font-size:11px;color:rgba(255,255,255,.35);text-align:center}
 .sb-del{background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-size:13px;padding:0 1px;flex-shrink:0}
 .sb-del:hover{color:#ff6b6b}
 .sb-footer{padding:10px 10px 14px;display:flex;flex-direction:column;gap:6px}
@@ -269,6 +282,11 @@ tfoot td.tl{text-align:left}
       <p class="ver" id="homeHint" style="opacity:.35;font-size:9px">&#8962; Click logo to return home</p>
     </div>
     <div class="sb-tree" id="sbTree"></div>
+    <div class="sb-search-wrap" style="position:relative">
+      <span class="sb-search-icon">&#128269;</span>
+      <input class="sb-search-input" id="sbSearchInput" placeholder="Search clients or accounts..." oninput="onSbSearch(this.value)" autocomplete="off"/>
+    </div>
+    <div id="sbSearchResults" style="display:none" class="sb-search-results"></div>
     <div class="sb-footer" id="sbFooter">
       <button class="btn-sb btn-gold" onclick="openNewClientModal()">+ New Client</button>
       <button class="btn-sb btn-ghost" onclick="document.getElementById('xlUpload').click()">&#8679; Import Excel / CSV</button>
@@ -747,6 +765,111 @@ function sortedRows(rows){
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
+// ── Sidebar Search ─────────────────────────────────────────────────────────────
+var _sbSearchTimer=null;
+function onSbSearch(val){
+  clearTimeout(_sbSearchTimer);
+  var resultsEl=document.getElementById('sbSearchResults');
+  if(!val.trim()){resultsEl.style.display='none';resultsEl.innerHTML='';return;}
+  _sbSearchTimer=setTimeout(function(){runSbSearch(val.trim());},150);
+}
+function runSbSearch(q){
+  var resultsEl=document.getElementById('sbSearchResults');
+  var ql=q.toLowerCase();
+  var clients=db.clients||[];
+  if(isClientSession())clients=clients.filter(function(c){return c.id===_clientSession;});
+
+  var clientMatches=[];
+  var accountMatches=[];
+
+  for(var ci=0;ci<clients.length;ci++){
+    var c=clients[ci];
+    // Client name match
+    if(c.name.toLowerCase().indexOf(ql)>=0){
+      clientMatches.push({type:'client',cid:c.id,name:c.name,sub:(c.folders||[]).length+' year'+(c.folders&&c.folders.length!==1?'s':'')});
+    }
+    // Account matches across all folders
+    var folders=c.folders||[];
+    for(var fi=0;fi<folders.length;fi++){
+      var f=folders[fi];
+      var rows=f.rows||[];
+      for(var ri=0;ri<rows.length;ri++){
+        var r=rows[ri];
+        var searchable=(r.address||'')+' '+(r.owner||'')+' '+(r.account||'')+' '+(r.propName||'');
+        if(searchable.toLowerCase().indexOf(ql)>=0){
+          accountMatches.push({
+            type:'account',cid:c.id,fid:f.id,rid:r.id,
+            name:r.address||r.propName||r.account||'Account',
+            sub:c.name+' · '+f.year+(r.owner?' · '+r.owner:'')
+          });
+          if(accountMatches.length>=20)break; // cap results
+        }
+      }
+      if(accountMatches.length>=20)break;
+    }
+  }
+
+  var h='';
+  if(!clientMatches.length&&!accountMatches.length){
+    h='<div class="sb-result-empty">No results for "'+esc(q)+'"</div>';
+  } else {
+    if(clientMatches.length){
+      h+='<div class="sb-result-group">Clients</div>';
+      for(var i=0;i<clientMatches.length;i++){
+        var m=clientMatches[i];
+        h+='<div class="sb-result-item" onclick="sbGoClient(\''+m.cid+'\')">'
+         +'<div class="ri-main">&#128193; '+esc(m.name)+'</div>'
+         +'<div class="ri-sub">'+esc(m.sub)+'</div>'
+         +'</div>';
+      }
+    }
+    if(accountMatches.length){
+      h+='<div class="sb-result-group">Accounts</div>';
+      for(var i=0;i<accountMatches.length;i++){
+        var m=accountMatches[i];
+        h+='<div class="sb-result-item" onclick="sbGoAccount(\''+m.cid+'\',\''+m.fid+'\',\''+m.rid+'\')">'
+         +'<div class="ri-main">&#127968; '+esc(m.name)+'</div>'
+         +'<div class="ri-sub">'+esc(m.sub)+'</div>'
+         +'</div>';
+      }
+    }
+  }
+  resultsEl.innerHTML=h;
+  resultsEl.style.display='block';
+}
+function sbGoClient(cid){
+  clearSbSearch();
+  toggleClient(cid);
+}
+function sbGoAccount(cid,fid,rid){
+  clearSbSearch();
+  selectFolder(cid,fid);
+  // Highlight the row after render
+  setTimeout(function(){
+    var tr=document.querySelector('tr[data-id="'+rid+'"]');
+    if(tr){
+      tr.scrollIntoView({behavior:'smooth',block:'center'});
+      tr.style.outline='3px solid var(--gold)';
+      tr.style.outlineOffset='-1px';
+      setTimeout(function(){tr.style.outline='';tr.style.outlineOffset='';},2500);
+    }
+  },400);
+}
+function clearSbSearch(){
+  var inp=document.getElementById('sbSearchInput');
+  var res=document.getElementById('sbSearchResults');
+  if(inp)inp.value='';
+  if(res){res.style.display='none';res.innerHTML='';}
+}
+// Close search results when clicking outside
+document.addEventListener('click',function(e){
+  var wrap=document.querySelector('.sb-search-wrap');
+  var results=document.getElementById('sbSearchResults');
+  if(results&&wrap&&!wrap.contains(e.target)&&!results.contains(e.target)){
+    results.style.display='none';
+  }
+});
+
 function renderSidebar(){
   var el=document.getElementById('sbTree');
   var clients2=isClientSession()?(db.clients||[]).filter(function(c){return c.id===_clientSession;}):(db.clients||[]);
