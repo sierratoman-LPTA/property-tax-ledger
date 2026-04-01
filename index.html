@@ -765,7 +765,9 @@ function exportExcel(){
   var allArb=allRows.filter(function(r){return r.status==='Arbitration';}).length;
 
   var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-  html+='<head><meta charset="UTF-8"><style>td,th{font-family:Arial;font-size:9pt;}</style></head><body>';
+  html+='<head><meta charset="UTF-8"><style>td,th{font-family:Arial;font-size:9pt;}</style>';
+  html+='<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>'+f.year+' Ledger</x:Name><x:WorksheetOptions><x:FreezePanes/><x:FrozenNoSplit/><x:SplitHorizontal>3</x:SplitHorizontal><x:TopRowBottomPane>3</x:TopRowBottomPane><x:ActivePane>2</x:ActivePane></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->';
+  html+='</head><body>';
 
   // ── Executive Summary ──────────────────────────────────────────────────────
   html+='<table>';
@@ -786,41 +788,18 @@ function exportExcel(){
   html+='<td colspan="2"></td></tr>';
   html+='</tr></table>';
 
-  // ── Active year ledger only ────────────────────────────────────────────────
+  // ── Page break then ledger ─────────────────────────────────────────────────
   {
-    var reduced=countReduced(rows);
-    var totalRed=rows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
-    var savings=totMV(rows,'taxSavings');
-    var lit3=rows.filter(function(r){return r.status==='Active Litigation';}).length;
-    var arb3=rows.filter(function(r){return r.status==='Arbitration';}).length;
-    var t24=totMV(rows,'priorVal'),t25=totMV(rows,'prelim');
-    var chg=t24>0&&t25>0?((t25-t24)/t24*100).toFixed(1)+'%':'--';
-    var NC=19;
-    html+='<br/><table>';
-    // Year summary header
-    html+='<tr><td colspan="'+NC+'" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:14pt;padding:12px;border-bottom:3px solid #C9A84C;">'+esc(cl.name)+' &mdash; '+f.year+' Tax Year Summary</td></tr>';
-    html+='<tr><td colspan="'+NC+'" style="background:#EEF2F7;color:#666;font-size:8pt;padding:5px 12px;">Prepared by Lane Property Tax Advocates &nbsp;|&nbsp; Tax Year '+f.year+' &nbsp;|&nbsp; Confidential</td></tr>';
-    html+='<tr><td colspan="'+NC+'" style="height:10px;"></td></tr>';
-    html+='<tr><td colspan="'+NC+'" style="background:#D4EDDA;color:#155724;font-weight:bold;font-size:18pt;text-align:center;padding:16px;border:2px solid #28A745;">'+f.year+' TAX SAVINGS: '+(savings>0?fmtMV(savings):'$0')+'</td></tr>';
-    html+='<tr><td colspan="'+NC+'" style="height:10px;"></td></tr>';
-    html+='<tr><td colspan="'+NC+'" style="background:#002147;color:#fff;font-weight:bold;font-size:10pt;padding:7px 12px;border-bottom:2px solid #C9A84C;">'+f.year+' Key Metrics</td></tr>';
-    var skl=['Total Accounts','Accts Reduced','Litigation','Arbitration','Total Value Reduced','Tax Savings','Portfolio Chg'];
-    html+='<tr>';
-    for(var k=0;k<skl.length;k++)html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;text-align:center;padding:5px 8px;border:1px solid #ccc;">'+skl[k]+'</td>';
-    html+='<td colspan="'+(NC-skl.length)+'"></td></tr>';
-    html+='<tr>';
-    var skv=[rows.length,reduced,lit3,arb3,totalRed>0?fmtMV(totalRed):'--',savings>0?fmtMV(savings):'--',chg];
-    for(var k=0;k<skv.length;k++){var isH2=(k===4||k===5);
-      html+='<td style="background:'+(isH2?'#D4EDDA':'#F0F6FF')+';color:'+(isH2?'#155724':'#002147')+';font-weight:bold;font-size:13pt;text-align:center;padding:10px 8px;border:2px solid '+(isH2?'#28A745':'#ddd')+';">'+skv[k]+'</td>';}
-    html+='<td colspan="'+(NC-skv.length)+'"></td></tr>';
-    html+='<tr><td colspan="'+NC+'" style="height:16px;"></td></tr>';
-    // Ledger
-    var ledgerHdrs=['#','CAD','Account #','Address','Property Name','Property Type','Improv Type','CAD Owner/Assessee',
+    var NC=16;
+    html+='<br style="page-break-before:always"/>';
+    html+='<table>';
+    // Ledger title + frozen header rows
+    html+='<tr><td colspan="'+NC+'" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:12pt;padding:10px 12px;border-bottom:3px solid #C9A84C;">'+esc(cl.name)+' &mdash; '+f.year+' Account Ledger</td></tr>';
+    html+='<tr><td colspan="'+NC+'" style="background:#EEF2F7;color:#666;font-size:8pt;padding:4px 12px;">* Auto-calculated &nbsp;|&nbsp; Yellow=Litigation &nbsp; Blue=Arbitration &nbsp; Purple=Awaiting Formal &nbsp; Green=Reduced Below Prior Year</td></tr>';
+    html+='<tr style="mso-freeze-panes:3 0;">';
+    var ledgerHdrs=['#','CAD','Account #','Address','CAD Owner/Assessee',
       L.prior,L.prelim,L.prelimAppr||'Prelim Appr Value',L.finalAppr,L.finalMkt,
       'Market Reduction *','% Change *','Tax Rate','Tax Savings *','Status','Notes'];
-    html+='<tr><td colspan="'+NC+'" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:12pt;padding:10px 12px;border-bottom:3px solid #C9A84C;">'+esc(cl.name)+' &mdash; '+f.year+' Account Ledger</td></tr>';
-    html+='<tr><td colspan="'+NC+'" style="background:#EEF2F7;color:#666;font-size:8pt;padding:4px 12px;">* Auto-calculated &nbsp;|&nbsp; Yellow=Litigation &nbsp; Blue=Arbitration &nbsp; Green=Reduced Below Prior Year</td></tr>';
-    html+='<tr>';
     for(var hi=0;hi<ledgerHdrs.length;hi++)html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:center;padding:7px 6px;border-bottom:2px solid #C9A84C;white-space:nowrap;">'+esc(ledgerHdrs[hi])+'</td>';
     html+='</tr>';
     var exportRows=sortedRows(rows);
@@ -835,9 +814,6 @@ function exportExcel(){
       html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.cad||'')+'</td>';
       html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;mso-number-format:\'@\';">'+esc(String(r.account||''))+'</td>';
       html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(r.address||'')+'</td>';
-      html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(r.propName||'')+'</td>';
-      html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(r.propType||'')+'</td>';
-      html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(r.impType||'')+'</td>';
       html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(r.owner||'')+'</td>';
       html+='<td style="background:'+bg+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(parseMV(r.priorVal)?fmtMV(parseMV(r.priorVal)):'')+'</td>';
       html+='<td style="background:'+bg+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(parseMV(r.prelim)?fmtMV(parseMV(r.prelim)):'')+'</td>';
@@ -856,7 +832,7 @@ function exportExcel(){
     html+='<tr><td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;padding:7px 6px;">TOTALS</td>';
     html+='<td style="background:#002147;padding:7px 6px;"></td>';
     html+='<td style="background:#002147;color:#fff;font-size:9pt;text-align:right;padding:7px 6px;">'+exportRows.length+' accounts</td>';
-    for(var ti=0;ti<5;ti++)html+='<td style="background:#002147;padding:7px 6px;"></td>';
+    for(var ti=0;ti<2;ti++)html+='<td style="background:#002147;padding:7px 6px;"></td>';
     var totFs=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed'];
     for(var ti=0;ti<totFs.length;ti++){var t=totMV(rows,totFs[ti]);html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:7px 6px;">'+(t>0?fmtMV(t):'')+'</td>';}
     html+='<td style="background:#002147;padding:7px 6px;"></td>';
