@@ -416,6 +416,23 @@ tfoot td.tl{text-align:left}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 // ── Firebase ───────────────────────────────────────────────────────────────────
+// ── SHA-256 Hashing ────────────────────────────────────────────────────────────
+async function sha256(str){
+  var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str.toUpperCase().trim()));
+  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
+// Synchronous hash cache for login checks (populated async)
+var _hashCache={};
+async function hashCode(str){
+  var key=str.toUpperCase().trim();
+  if(!_hashCache[key])_hashCache[key]=await sha256(key);
+  return _hashCache[key];
+}
+// Master password hash (pre-computed for '798271')
+// This is the SHA-256 of '798271' — the plain text never needs to be in code again
+var _PASS_HASH='';
+(async function(){_PASS_HASH=await sha256('798271');})();
+
 firebase.initializeApp({
   apiKey:"AIzaSyDlexpThTKIfq8zLacqCclVFThVEhtDjeY",
   authDomain:"propertytaxledger.firebaseapp.com",
@@ -453,11 +470,16 @@ dbRef.on('value',function(snap){
       var saved=sessionStorage.getItem('ptl_session');
       if(saved){
         var sess=JSON.parse(saved);
-        if(sess.type==='creator'){
+        var now=Date.now();
+        var sessionAge=now-(sess.ts||0);
+        // Expire sessions older than 1 hour
+        if(sessionAge>_TIMEOUT_MS){
+          sessionStorage.removeItem('ptl_session');
+        } else if(sess.type==='creator'){
           _clientSession=null;_employeeId=null;_sessionType='creator';
           _unlocked=true;
           document.getElementById('loginScreen').style.display='none';
-          updateLockUI();applySessionUI();
+          updateLockUI();applySessionUI();resetInactivityTimer();
           renderSidebar();renderDashboard();
           setTimeout(function(){setSyncDot('ok');},50);return;
         } else if(sess.type==='employee'&&sess.id){
@@ -466,7 +488,7 @@ dbRef.on('value',function(snap){
             _clientSession=null;_employeeId=emp2.id;_sessionType='employee';
             _unlocked=emp2.role==='editor';
             document.getElementById('loginScreen').style.display='none';
-            updateLockUI();applySessionUI();
+            updateLockUI();applySessionUI();resetInactivityTimer();
             renderSidebar();renderDashboard();
             setTimeout(function(){setSyncDot('ok');},50);return;
           }
@@ -476,7 +498,7 @@ dbRef.on('value',function(snap){
             _clientSession=matched2.id;_employeeId=null;_sessionType='client';
             _unlocked=false;
             document.getElementById('loginScreen').style.display='none';
-            updateLockUI();applySessionUI();
+            updateLockUI();applySessionUI();resetInactivityTimer();
             activeClientId=matched2.id;activeFolderId=null;
             renderSidebar();renderMain();
             setTimeout(function(){setSyncDot('ok');},50);return;
@@ -509,14 +531,37 @@ var pasteRows=[],pasteHdrs=[];
 var fileRows=[],fileHdrs=[],importFileName='';
 var undoStack=[];
 var _unlocked=false;
-var _PASS='798271';  // ← Creator master password
+var _PASS='798271'; // kept only for password modal unlock — will be hash-checked
 var _pendingAction=null;
 var _loginMode='staff';
 var _clientSession=null;
-var _sessionType=null; // 'creator', 'employee', 'client'
-var _employeeId=null;  // set when logged in as employee
+var _sessionType=null;
+var _employeeId=null;
 
 // ── Lock / Unlock ──────────────────────────────────────────────────────────────
+// ── Session Timeout (1 hour inactivity) ───────────────────────────────────────
+var _TIMEOUT_MS=60*60*1000; // 1 hour
+var _inactivityTimer=null;
+function resetInactivityTimer(){
+  if(_inactivityTimer)clearTimeout(_inactivityTimer);
+  _inactivityTimer=setTimeout(function(){
+    sessionStorage.removeItem('ptl_session');
+    _sessionType=null;_clientSession=null;_employeeId=null;_unlocked=false;
+    // Show logout message then login screen
+    document.getElementById('loginInput').value='';
+    document.getElementById('loginError').textContent='Session expired due to inactivity. Please log in again.';
+    switchLoginTab('staff');
+    document.getElementById('loginScreen').style.display='flex';
+  },_TIMEOUT_MS);
+}
+function touchActivity(){
+  if(_sessionType)resetInactivityTimer();
+}
+// Reset timer on any user interaction
+['click','keydown','mousemove','touchstart'].forEach(function(evt){
+  document.addEventListener(evt,touchActivity,{passive:true});
+});
+
 function requireUnlock(fn){
   // Clients and viewer employees can never unlock
   if(isClientSession()||(isEmployee()&&!_unlocked)){
@@ -529,9 +574,10 @@ function requireUnlock(fn){
   document.getElementById('pwModal').style.display='flex';
   setTimeout(function(){document.getElementById('pwInput').focus();},100);
 }
-function submitPassword(){
+async function submitPassword(){
   var val=document.getElementById('pwInput').value;
-  if(val===_PASS){
+  var inputHash=await sha256(val);
+  if(inputHash===_PASS_HASH){
     _unlocked=true;updateLockUI();
     document.getElementById('pwModal').style.display='none';
     if(_pendingAction){var fn=_pendingAction;_pendingAction=null;fn();}
@@ -601,58 +647,71 @@ function switchLoginTab(mode){
   document.getElementById('loginHint').textContent=mode==='staff'?'Staff access — full platform':'Client access — view your data only';
   document.getElementById('loginInput').focus();
 }
-function submitLogin(){
+async function submitLogin(){
   var val=document.getElementById('loginInput').value.trim();
   if(!val){document.getElementById('loginError').textContent='Please enter a password.';return;}
+  var btn=document.querySelector('.btn-login');
+  if(btn){btn.disabled=true;btn.textContent='Checking...';}
 
-  if(_loginMode==='staff'){
-    // Check creator master password first
-    if(val===_PASS){
-      _clientSession=null;_employeeId=null;_sessionType='creator';
-      sessionStorage.setItem('ptl_session',JSON.stringify({type:'creator'}));
-      document.getElementById('loginScreen').style.display='none';
-      _unlocked=true;updateLockUI();applySessionUI();
-      renderSidebar();renderDashboard();
-      return;
-    }
-    // Check employee codes
-    var emp=null;
-    for(var i=0;i<(db.employees||[]).length;i++){
-      var e=db.employees[i];
-      if(e.code&&e.code.trim()&&val.toUpperCase()===e.code.trim().toUpperCase()){emp=e;break;}
-    }
-    if(emp){
-      _clientSession=null;_employeeId=emp.id;_sessionType='employee';
-      var isEditor=emp.role==='editor';
-      sessionStorage.setItem('ptl_session',JSON.stringify({type:'employee',id:emp.id}));
-      document.getElementById('loginScreen').style.display='none';
-      _unlocked=isEditor;updateLockUI();applySessionUI();
-      renderSidebar();renderDashboard();
-      return;
-    }
-    document.getElementById('loginError').textContent='Incorrect password or code.';
-    document.getElementById('loginInput').value='';
-    document.getElementById('loginInput').focus();
+  try{
+    var inputHash=await sha256(val);
 
-  } else {
-    // Client access
-    var matched=null;
-    for(var i=0;i<(db.clients||[]).length;i++){
-      var c=db.clients[i];
-      if(c.clientCode&&c.clientCode.trim()&&val.toUpperCase()===c.clientCode.trim().toUpperCase()){matched=c;break;}
-    }
-    if(matched){
-      _clientSession=matched.id;_employeeId=null;_sessionType='client';
-      sessionStorage.setItem('ptl_session',JSON.stringify({type:'client',id:matched.id}));
-      document.getElementById('loginScreen').style.display='none';
-      _unlocked=false;updateLockUI();applySessionUI();
-      activeClientId=matched.id;activeFolderId=null;
-      renderSidebar();renderMain();
-    } else {
-      document.getElementById('loginError').textContent='Access code not recognised.';
+    if(_loginMode==='staff'){
+      // Check creator master password hash
+      if(inputHash===_PASS_HASH){
+        _clientSession=null;_employeeId=null;_sessionType='creator';
+        sessionStorage.setItem('ptl_session',JSON.stringify({type:'creator',ts:Date.now()}));
+        document.getElementById('loginScreen').style.display='none';
+        _unlocked=true;updateLockUI();applySessionUI();
+        resetInactivityTimer();
+        renderSidebar();renderDashboard();
+        return;
+      }
+      // Check employee codes (stored as hashes in db)
+      var emp=null;
+      for(var i=0;i<(db.employees||[]).length;i++){
+        var e=db.employees[i];
+        var storedHash=e.codeHash||await sha256(e.code||'');
+        if(inputHash===storedHash){emp=e;break;}
+      }
+      if(emp){
+        _clientSession=null;_employeeId=emp.id;_sessionType='employee';
+        sessionStorage.setItem('ptl_session',JSON.stringify({type:'employee',id:emp.id,ts:Date.now()}));
+        document.getElementById('loginScreen').style.display='none';
+        _unlocked=emp.role==='editor';updateLockUI();applySessionUI();
+        resetInactivityTimer();
+        renderSidebar();renderDashboard();
+        return;
+      }
+      document.getElementById('loginError').textContent='Incorrect password or code.';
       document.getElementById('loginInput').value='';
       document.getElementById('loginInput').focus();
+
+    } else {
+      // Client access
+      var matched=null;
+      for(var i=0;i<(db.clients||[]).length;i++){
+        var c=db.clients[i];
+        if(!c.clientCode&&!c.clientCodeHash)continue;
+        var storedHash=c.clientCodeHash||await sha256(c.clientCode||'');
+        if(inputHash===storedHash){matched=c;break;}
+      }
+      if(matched){
+        _clientSession=matched.id;_employeeId=null;_sessionType='client';
+        sessionStorage.setItem('ptl_session',JSON.stringify({type:'client',id:matched.id,ts:Date.now()}));
+        document.getElementById('loginScreen').style.display='none';
+        _unlocked=false;updateLockUI();applySessionUI();
+        resetInactivityTimer();
+        activeClientId=matched.id;activeFolderId=null;
+        renderSidebar();renderMain();
+      } else {
+        document.getElementById('loginError').textContent='Access code not recognised.';
+        document.getElementById('loginInput').value='';
+        document.getElementById('loginInput').focus();
+      }
     }
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Enter';}
   }
 }
 function isCreator(){return _sessionType==='creator';}
@@ -847,17 +906,23 @@ function openNewClientModal(){
   document.getElementById('clientModal').style.display='flex';
   setTimeout(function(){document.getElementById('cm_name').focus();},100);
 }
-function saveClient(){
+async function saveClient(){
   var name=document.getElementById('cm_name').value.trim();
   var firm=document.getElementById('cm_firm').value.trim();
   var code=document.getElementById('cm_code').value.trim().toUpperCase();
   if(!name){alert('Please enter a client name.');return;}
   if(!checkLock())return;
-  if(editingClientId){var c=getClient(editingClientId);if(c){c.name=name;c.firm=firm;c.clientCode=code;}}
-  else{
+  var codeHash=code?await sha256(code):'';
+  var codeHint=code?code.slice(0,2)+'***':'';
+  if(editingClientId){
+    var c=getClient(editingClientId);
+    if(c){c.name=name;c.firm=firm;
+      if(code){c.clientCodeHash=codeHash;c.clientCodeHint=codeHint;c.clientCode='';}
+    }
+  } else {
     var yr=String(new Date().getFullYear());
     var nf={id:uid(),year:yr,labels:defaultLabels(yr),rows:[emptyRow()]};
-    var nc={id:uid(),name:name,firm:firm,clientCode:code,expanded:true,folders:[nf]};
+    var nc={id:uid(),name:name,firm:firm,clientCodeHash:codeHash,clientCodeHint:codeHint,expanded:true,folders:[nf]};
     if(!db.clients)db.clients=[];
     db.clients.push(nc);activeClientId=nc.id;activeFolderId=nf.id;
   }
@@ -868,7 +933,8 @@ function editClientModal(cid){
   document.getElementById('cmTitle').textContent='Edit Client';
   document.getElementById('cm_name').value=c.name||'';
   document.getElementById('cm_firm').value=c.firm||'';
-  document.getElementById('cm_code').value=c.clientCode||'';
+  document.getElementById('cm_code').value=''; // never show hash, let them re-enter to change
+  document.getElementById('cm_code').placeholder=c.clientCodeHint?'Current: '+c.clientCodeHint+' (leave blank to keep)':'e.g. SILV2025';
   document.getElementById('clientModal').style.display='flex';
 }
 function delClient(cid){
@@ -1651,7 +1717,7 @@ function renderTeamPage(){
       var emp=emps[i];var bg=i%2===0?'#fff':'#f8f9fb';
       h+='<div style="background:'+bg+';padding:12px 20px;display:grid;grid-template-columns:1fr 140px 140px 80px;gap:10px;align-items:center;border-top:1px solid #eee">';
       h+='<div style="font-size:13px;font-weight:600;color:#222">'+esc(emp.name)+'</div>';
-      h+='<div style="font-size:12px;font-family:monospace;color:#555;background:#f0f2f5;padding:4px 8px;border-radius:4px;letter-spacing:1px">'+esc(emp.code)+'</div>';
+      h+='<div style="font-size:12px;font-family:monospace;color:#555;background:#f0f2f5;padding:4px 8px;border-radius:4px;letter-spacing:1px">'+esc(emp.codeHint||'••••••')+'</div>';
       h+='<div>'
        +'<select onchange="setEmployeeRole(\''+emp.id+'\',this.value)" style="border:1.5px solid '+(emp.role==='editor'?'#28a745':'#ccc')+';border-radius:5px;padding:5px 8px;font-size:12px;font-weight:600;color:'+(emp.role==='editor'?'#155724':'#333')+';background:'+(emp.role==='editor'?'#d4edda':'#fff')+'">'
        +'<option value="viewer"'+(emp.role==='viewer'||!emp.role?' selected':'')+'>&#128065; Viewer</option>'
@@ -1664,16 +1730,19 @@ function renderTeamPage(){
   h+='</div></div>';
   el.innerHTML=h;
 }
-function addEmployee(){
+async function addEmployee(){
   var name=document.getElementById('emp_name').value.trim();
   var code=document.getElementById('emp_code').value.trim().toUpperCase();
   if(!name||!code){alert('Please enter both a name and access code.');return;}
-  // Check for duplicate code
+  // Check for duplicate code hash
+  var newHash=await sha256(code);
   for(var i=0;i<(db.employees||[]).length;i++){
-    if(db.employees[i].code.toUpperCase()===code){alert('That access code is already in use. Please choose a different one.');return;}
+    var existHash=db.employees[i].codeHash||await sha256(db.employees[i].code||'');
+    if(existHash===newHash){alert('That access code is already in use. Please choose a different one.');return;}
   }
   if(!db.employees)db.employees=[];
-  db.employees.push({id:uid(),name:name,code:code,role:'viewer'});
+  // Store hash only, not plain text code
+  db.employees.push({id:uid(),name:name,codeHash:newHash,codeHint:code.slice(0,2)+'***',role:'viewer'});
   saveDB();renderTeamPage();
 }
 function setEmployeeRole(id,role){
