@@ -64,6 +64,7 @@ tbody tr.lit{background:#FFF3CD!important}
 tbody tr.arb{background:#CCE5FF!important}
 tbody tr.reduced{background:#D4EDDA!important}
 tbody tr.formal{background:#EAD5F5!important}
+tbody tr.completed{}
 tbody td{padding:3px 5px;vertical-align:middle}
 tbody td input,tbody td select{border:none;background:transparent;font-size:11.5px;font-family:Arial,sans-serif;color:#222;width:100%;padding:2px 3px;outline:none}
 tbody td input:focus,tbody td select:focus{background:#fffbe6;border-radius:3px}
@@ -358,9 +359,9 @@ function checkLock(){
   return true;
 }
 var COUNTIES=['Harris','Brazoria','Montgomery','Fort Bend','Galveston','San Jacinto','Other'];
-var STATUS=['None','Active Litigation','Arbitration','Reduced Below Last Year','Awaiting Formal','Completed'];
+var STATUS=['','Active Litigation','Arbitration','Reduced Below Last Year','Awaiting Formal','Completed'];
 var SCLS={'Active Litigation':'lit','Arbitration':'arb','Reduced Below Last Year':'reduced','Awaiting Formal':'formal','Completed':'completed'};
-var STATUS_FILLS={'Active Litigation':'#FFF3CD','Arbitration':'#CCE5FF','Reduced Below Last Year':'#D4EDDA','Awaiting Formal':'#EAD5F5','Completed':'#F8F9FA'};
+var STATUS_FILLS={'Active Litigation':'#FFF3CD','Arbitration':'#CCE5FF','Reduced Below Last Year':'#D4EDDA','Awaiting Formal':'#EAD5F5'};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
@@ -382,7 +383,7 @@ function defaultLabels(year){
 function emptyRow(){
   return{id:uid(),cad:'Harris',account:'',address:'',propName:'',propType:'',impType:'',
     owner:'',priorVal:'',prelim:'',prelimAppr:'',finalAppr:'',finalMkt:'',
-    mktRed:'',pctChange:'',taxRate:'',taxSavings:'',status:'None',notes:''};
+    mktRed:'',pctChange:'',taxRate:'',taxSavings:'',status:'',notes:''};
 }
 
 function recalcRow(r){
@@ -403,8 +404,8 @@ function recalcRow(r){
     r.taxSavings=String(Math.round((paVal-faVal)*rateVal));
   }else{r.taxSavings='';}
   if(prior!==null&&finalAppr!==null){
-    if(finalAppr<prior){if(r.status==='None')r.status='Reduced Below Last Year';}
-    else if(r.status==='Reduced Below Last Year')r.status='None';
+    if(finalAppr<prior){if(r.status==='')r.status='Reduced Below Last Year';}
+    else if(r.status==='Reduced Below Last Year')r.status='';
   }
 }
 
@@ -660,7 +661,7 @@ function applyMap(rawRows,mapping){
       var m=mapping[j];var val=String(raw[m.col]||'').trim();
       if(['priorVal','prelim','prelimAppr','finalAppr','finalMkt'].indexOf(m.field)>=0)val=val.replace(/[$,]/g,'');
       if(m.field==='cad'){var match=COUNTIES.filter(function(co){return co.toLowerCase()===val.toLowerCase();})[0];val=match||val||'Harris';}
-      if(m.field==='status'){var match=STATUS.filter(function(s){return s.toLowerCase()===val.toLowerCase();})[0];val=match||'None';}
+      if(m.field==='status'){var match=STATUS.filter(function(s){return s.toLowerCase()===val.toLowerCase();})[0];val=match||'';}
       r[m.field]=val;
     }
     recalcRow(r);out.push(r);
@@ -800,7 +801,7 @@ function exportExcel(){
   html+='<td colspan="2" style="background:#CCE5FF;border:1.5px solid #004085;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#9632; Arbitration</td>';
   html+='<td colspan="3" style="background:#D4EDDA;border:1.5px solid #28A745;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#9632; Reduced Below Last Year</td>';
   html+='<td colspan="3" style="background:#EAD5F5;border:1.5px solid #9B59B6;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#9632; Awaiting Formal</td>';
-  html+='<td colspan="3" style="background:#F8F9FA;border:1.5px solid #adb5bd;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#10003; Completed</td>';
+  html+='<td colspan="3" style="background:#fff;border:1.5px solid #ccc;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#10003; Completed</td>';
   html+='</tr>';
 
   // Row 2: Column header row (frozen)
@@ -816,7 +817,7 @@ function exportExcel(){
     var pv=parseFloat(r.pctChange)||0;
     var pctColor=pv<0?'#155724':pv>0?'#721c24':'#444';
     var redAmt=parseMV(r.mktRed)||0;var savAmt=parseMV(r.taxSavings)||0;
-    var displayStatus=r.status==='Completed'?'&#10003; Done':r.status==='None'?'':r.status;
+    var displayStatus=r.status==='Completed'?'&#10003; Done':r.status===''?'':r.status;
     html+='<tr>';
     html+='<td style="background:'+bg+';color:#888;font-size:9pt;text-align:center;padding:5px 6px;border:1px solid #eee;">'+(ri+1)+'</td>';
     html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.cad||'')+'</td>';
@@ -1264,7 +1265,7 @@ function renderTab(){
     var cadOpts='<option'+(filterCAD==='All'?' selected':'')+'>All</option>';
     for(var i=0;i<COUNTIES.length;i++)cadOpts+='<option'+(filterCAD===COUNTIES[i]?' selected':'')+'>'+COUNTIES[i]+'</option>';
     var stOpts='<option'+(filterStatus==='All'?' selected':'')+'>All</option>';
-    for(var i=0;i<STATUS.length;i++){if(STATUS[i]!=='None')stOpts+='<option'+(filterStatus===STATUS[i]?' selected':'')+'>'+STATUS[i]+'</option>';}
+    for(var i=0;i<STATUS.length;i++){if(STATUS[i]!=='')stOpts+='<option'+(filterStatus===STATUS[i]?' selected':'')+'>'+STATUS[i]+'</option>';}
     el.innerHTML='<div class="kpi-row">'
       +'<div class="kpi"><div class="lbl">Total Accounts</div><div class="val" id="kpi_total">'+(f.rows||[]).length+'</div></div>'
       +'<div class="kpi"><div class="lbl">Accounts Reduced</div><div class="val" id="kpi_reduced">0</div></div>'
@@ -1292,7 +1293,7 @@ function renderTab(){
       +'<div class="legend-item"><div class="legend-dot" style="background:#CCE5FF;border-color:#004085"></div>Arbitration</div>'
       +'<div class="legend-item"><div class="legend-dot" style="background:#D4EDDA;border-color:#28A745"></div>Reduced Below Last Year</div>'
       +'<div class="legend-item"><div class="legend-dot" style="background:#EAD5F5;border-color:#9B59B6"></div>Awaiting Formal</div>'
-      +'<div class="legend-item"><div class="legend-dot" style="background:#f8f9fa;border-color:#adb5bd"></div>Completed</div>'
+      +'<div class="legend-item"><span style="font-size:12px">&#10003;</span> Completed</div>'
       +'<span style="font-size:11px;color:#888;margin-left:6px">&#8595; = reduced &nbsp; * = auto-calculated</span>'
       +'</div>';
     renderTable();renderKPIs();
@@ -1309,12 +1310,12 @@ function seedDemo(){
   var rows=[
     {id:uid(),cad:'Harris',account:'1401380020003',address:'1705 OLIVER ST',propName:'Lower Heights',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC ET AL',priorVal:'23008704',prelim:'30252654',prelimAppr:'30252654',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Active Litigation',notes:''},
     {id:uid(),cad:'Harris',account:'1065400000001',address:'12121 KATY FWY',propName:'Tully Shopping Center',propType:'Retail',impType:'Strip Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'18016780',prelim:'20770679',prelimAppr:'20770679',finalAppr:'19917983',finalMkt:'19917983',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Active Litigation',notes:''},
-    {id:uid(),cad:'Brazoria',account:'172773',address:'3126 S HIGHWAY 35',propName:'Highland Square',propType:'Retail',impType:'Regional Shopping Center',owner:'HIGHLAND SQUARE LTD',priorVal:'15500000',prelim:'17221060',prelimAppr:'17221060',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
-    {id:uid(),cad:'Harris',account:'1378860010001',address:'6515 GARTH RD',propName:'',propType:'Retail',impType:'Community Shopping Center',owner:'99 WEST 570 PARTNERS LLC',priorVal:'13045898',prelim:'13590925',prelimAppr:'13590925',finalAppr:'11800000',finalMkt:'11800000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
-    {id:uid(),cad:'Harris',account:'1500100010001',address:'5010 GARTH RD',propName:'Baytown Commons',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'8658515',prelim:'9677723',prelimAppr:'9677723',finalAppr:'7000000',finalMkt:'7000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Brazoria',account:'172773',address:'3126 S HIGHWAY 35',propName:'Highland Square',propType:'Retail',impType:'Regional Shopping Center',owner:'HIGHLAND SQUARE LTD',priorVal:'15500000',prelim:'17221060',prelimAppr:'17221060',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'',notes:''},
+    {id:uid(),cad:'Harris',account:'1378860010001',address:'6515 GARTH RD',propName:'',propType:'Retail',impType:'Community Shopping Center',owner:'99 WEST 570 PARTNERS LLC',priorVal:'13045898',prelim:'13590925',prelimAppr:'13590925',finalAppr:'11800000',finalMkt:'11800000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'',notes:''},
+    {id:uid(),cad:'Harris',account:'1500100010001',address:'5010 GARTH RD',propName:'Baytown Commons',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'8658515',prelim:'9677723',prelimAppr:'9677723',finalAppr:'7000000',finalMkt:'7000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'',notes:''},
     {id:uid(),cad:'Fort Bend',account:'R73817',address:'1903 TEXAS PKWY',propName:'Hunters Square',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES - Silvestri',priorVal:'3912114',prelim:'7624325',prelimAppr:'7624325',finalAppr:'',finalMkt:'',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'Arbitration',notes:''},
-    {id:uid(),cad:'Brazoria',account:'175159',address:'1216 FM 1462',propName:'Alvin Shopping Center',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'4379715',prelim:'4528810',prelimAppr:'4528810',finalAppr:'2500000',finalMkt:'2500000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
-    {id:uid(),cad:'Harris',account:'0341980000008',address:'3316 SHAVER ST',propName:'South Shaver Square',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'5532800',prelim:'5983319',prelimAppr:'5983319',finalAppr:'5000000',finalMkt:'5000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'None',notes:''},
+    {id:uid(),cad:'Brazoria',account:'175159',address:'1216 FM 1462',propName:'Alvin Shopping Center',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'4379715',prelim:'4528810',prelimAppr:'4528810',finalAppr:'2500000',finalMkt:'2500000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'',notes:''},
+    {id:uid(),cad:'Harris',account:'0341980000008',address:'3316 SHAVER ST',propName:'South Shaver Square',propType:'Retail',impType:'Neighborhood Shopping Center',owner:'FESTIVAL PROPERTIES INC',priorVal:'5532800',prelim:'5983319',prelimAppr:'5983319',finalAppr:'5000000',finalMkt:'5000000',mktRed:'',pctChange:'',taxRate:'.02204279',taxSavings:'',status:'',notes:''},
   ];
   for(var i=0;i<rows.length;i++)recalcRow(rows[i]);
   db.clients.push({id:uid(),name:'Silvestri Investments',firm:'Lane Property Tax Advocates',expanded:true,
