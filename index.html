@@ -1306,11 +1306,11 @@ function renderDashboard(){
   }
 
   var latestYearAccounts=0;
-  for(var ci2=0;ci2<clients.length;ci2++){var cfl2=clients[ci2].folders||[];if(cfl2.length)latestYearAccounts+=(cfl2[cfl2.length-1].rows||[]).filter(function(r){return r.status!=='Completed';}).length;}
+  for(var ci2=0;ci2<clients.length;ci2++){var cfl2=clients[ci2].folders||[];if(cfl2.length)latestYearAccounts+=(cfl2[cfl2.length-1].rows||[]).length;}
   var totalYearsTracked=clients.reduce(function(s,c){return s+(c.folders?c.folders.length:0);},0);
   h+='<div class="cc-totals" style="grid-template-columns:repeat(3,1fr)">';
   h+='<div class="cc-total"><div class="ct-val">'+clients.length+'</div><div class="ct-lbl">Total Clients</div></div>';
-  h+='<div class="cc-total"><div class="ct-val">'+latestYearAccounts+'</div><div class="ct-lbl">Active Accounts (Latest Year)</div></div>';
+  h+='<div class="cc-total"><div class="ct-val">'+latestYearAccounts+'</div><div class="ct-lbl">Current Portfolio</div></div>';
   h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
   h+='</div>';
   h+='</div>';
@@ -1336,7 +1336,7 @@ function renderDashboard(){
     h+='<div class="cc-card-body">';
     h+='<div class="cc-savings">'+(cSavings>0?fmtMV(cSavings):'$0')+'<span>Total Tax Savings</span></div>';
     h+='<div class="cc-stats" style="grid-template-columns:1fr 1fr">';
-    h+='<div class="cc-stat"><div class="sv">'+cAccounts+'</div><div class="sl">Active Accounts</div></div>';
+    h+='<div class="cc-stat"><div class="sv">'+cAccounts+'</div><div class="sl">Current Portfolio</div></div>';
     h+='<div class="cc-stat"><div class="sv">'+folders.length+'</div><div class="sl">Years Tracked</div></div>';
     h+='</div></div>';
     h+='<div class="cc-card-ftr"><span>&#128193; '+folders.length+' year'+(folders.length!==1?'s':'')+' tracked</span></div>';
@@ -1365,7 +1365,7 @@ function renderClientOverview(cl){
 
   // Use most recent year for accounts
   var latestFolder=folders.length?folders[folders.length-1]:null;
-  var latestRows=latestFolder?(latestFolder.rows||[]).filter(function(r){return r.status!=='Completed';}):[];
+  var latestRows=latestFolder?latestFolder.rows||[]:[];
 
   var h='<div class="cc-wrap">';
 
@@ -1377,7 +1377,7 @@ function renderClientOverview(cl){
 
   // Always-accurate totals strip
   h+='<div class="cc-totals" style="grid-template-columns:repeat(3,1fr)">';
-  h+='<div class="cc-total"><div class="ct-val">'+latestRows.length+'</div><div class="ct-lbl">Active Accounts</div></div>';
+  h+='<div class="cc-total"><div class="ct-val">'+latestRows.length+'</div><div class="ct-lbl">Current Portfolio</div></div>';
   h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
   h+='<div class="cc-total"><div class="ct-val">'+folders.length+'</div><div class="ct-lbl">Years Tracked</div></div>';
   h+='</div>';
