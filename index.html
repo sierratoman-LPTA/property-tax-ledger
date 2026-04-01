@@ -161,12 +161,6 @@ tfoot td.tl{text-align:left}
 .pdf-menu button{display:block;width:100%;text-align:left;padding:10px 14px;font-size:12px;font-weight:600;border:none;background:#fff;cursor:pointer;color:#002147}
 .pdf-menu button:hover{background:#f0f4f8}
 .pdf-menu .pdf-divider{height:1px;background:#eee;margin:2px 0}
-.lock-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.2);border-top:1px solid rgba(255,255,255,0.08)}
-.lock-status{font-size:10px;font-weight:700;letter-spacing:.4px;display:flex;align-items:center;gap:5px}
-.lock-icon{font-size:13px}
-.btn-lock{border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.3px}
-.btn-lock.locked{background:#dc3545;color:#fff;}
-.btn-lock.unlocked{background:#28a745;color:#fff;}
 
 /* ── Mobile Responsive ── */
 @media(max-width:768px){
@@ -276,15 +270,10 @@ tfoot td.tl{text-align:left}
     </div>
     <div class="sb-tree" id="sbTree"></div>
     <div class="sb-footer" id="sbFooter">
-      <button class="btn-sb btn-gold" onclick="requireUnlock(openNewClientModal)">+ New Client</button>
-      <button class="btn-sb btn-ghost" onclick="requireUnlock(function(){document.getElementById('xlUpload').click()})">&#8679; Import Excel / CSV</button>
+      <button class="btn-sb btn-gold" onclick="openNewClientModal()">+ New Client</button>
+      <button class="btn-sb btn-ghost" onclick="document.getElementById('xlUpload').click()">&#8679; Import Excel / CSV</button>
       <input type="file" id="xlUpload" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileUpload(event)"/>
-    </div>
-    <div class="lock-bar">
-      <div class="lock-status" id="lockStatus"><span class="lock-icon">🔒</span><span id="lockLabel">LOCKED</span></div>
-      <button class="btn-lock locked" id="lockBtn" onclick="toggleLock()">UNLOCK</button>
-    </div>
-  </div>
+    </div></div>
 
 <!-- Date Range PDF Modal -->
 <!-- Login Screen -->
@@ -566,62 +555,21 @@ function touchActivity(){
   document.addEventListener(evt,touchActivity,{passive:true});
 });
 
+// ── Permission check (replaces old lock system) ────────────────────────────────
+function canEdit(){
+  if(isCreator())return true;
+  if(isEmployee()&&_unlocked)return true; // editor employees
+  return false;
+}
 function requireUnlock(fn){
-  // Clients and viewer employees can never unlock
-  if(isClientSession()||(isEmployee()&&!_unlocked)){
-    alert('You do not have permission to make changes.');return;
-  }
-  if(_unlocked){fn();return;}
-  _pendingAction=fn;
-  document.getElementById('pwInput').value='';
-  document.getElementById('pwError').textContent='';
-  document.getElementById('pwModal').style.display='flex';
-  setTimeout(function(){document.getElementById('pwInput').focus();},100);
-}
-async function submitPassword(){
-  var val=document.getElementById('pwInput').value;
-  var inputHash=await sha256(val);
-  if(inputHash===_PASS_HASH){
-    _unlocked=true;updateLockUI();
-    document.getElementById('pwModal').style.display='none';
-    if(_pendingAction){var fn=_pendingAction;_pendingAction=null;fn();}
-  } else {
-    document.getElementById('pwError').textContent='Incorrect password. Try again.';
-    document.getElementById('pwInput').value='';
-    document.getElementById('pwInput').focus();
-  }
-}
-function closePwModal(){
-  document.getElementById('pwModal').style.display='none';
-  _pendingAction=null;
-}
-function toggleLock(){
-  if(_unlocked){
-    _unlocked=false;updateLockUI();
-  } else {
-    requireUnlock(function(){});
-  }
-}
-function updateLockUI(){
-  var btn=document.getElementById('lockBtn');
-  var lbl=document.getElementById('lockLabel');
-  var icon=document.querySelector('.lock-icon');
-  if(_unlocked){
-    btn.textContent='LOCK';btn.className='btn-lock unlocked';
-    lbl.textContent='UNLOCKED';icon.textContent='🔓';
-  } else {
-    btn.textContent='UNLOCK';btn.className='btn-lock locked';
-    lbl.textContent='LOCKED';icon.textContent='🔒';
-  }
-  // Re-render so inputs and delete buttons update
-  renderSidebar();
-  var f=getActiveFolder();
-  if(f){renderTable();renderKPIs();}
+  if(!canEdit()){alert('You do not have permission to make changes.');return;}
+  fn();
 }
 function checkLock(){
-  if(!_unlocked){requireUnlock(function(){});return false;}
+  if(!canEdit()){alert('You do not have permission to make changes.');return false;}
   return true;
 }
+function updateLockUI(){} // no-op — lock UI removed
 
 // ── Login System ───────────────────────────────────────────────────────────────
 function initLoginScreen(){
@@ -632,13 +580,10 @@ function initLoginScreen(){
 }
 function applySessionUI(){
   var isClient=isClientSession();
-  var isEmp=isEmployee();
   var hint=document.getElementById('homeHint');
   var footer=document.getElementById('sbFooter');
-  var lockBar=document.querySelector('.lock-bar');
   if(hint)hint.style.display=isClient?'none':'';
   if(footer)footer.style.display=isClient?'none':'';
-  if(lockBar)lockBar.style.display=(isClient||isEmp)?'none':'';
   setTimeout(syncMobLogo,100);
 }
 function switchLoginTab(mode){
@@ -815,7 +760,7 @@ function renderSidebar(){
     html+='<div class="sb-client'+(activeFolderId===null&&activeClientId===c.id?' active':'')+'" onclick="toggleClient(\''+c.id+'\')">'
       +'<button class="sb-toggle" onclick="event.stopPropagation();toggleExpand(\''+c.id+'\')">'+(exp?'&#9660;':'&#9654;')+'</button>'
       +'<span class="cname">'+esc(c.name)+'</span>'
-      +(_unlocked?'<button class="sb-del" onclick="event.stopPropagation();delClient(\''+c.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
+      +(canEdit()?'<button class="sb-del" onclick="event.stopPropagation();delClient(\''+c.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
     if(exp&&c.folders){
       for(var j=0;j<c.folders.length;j++){
         var f=c.folders[j];var isA=activeClientId===c.id&&activeFolderId===f.id;
@@ -823,9 +768,9 @@ function renderSidebar(){
           +'<span style="font-size:10px;opacity:.6">&#128193;</span>'
           +'<span class="fname">'+esc(f.year)+'</span>'
           +'<span style="font-size:9px;opacity:.4;margin-left:2px">'+(f.rows?f.rows.length:0)+'</span>'
-          +(_unlocked?'<button class="sb-del" onclick="event.stopPropagation();delFolder(\''+c.id+'\',\''+f.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
+          +(canEdit()?'<button class="sb-del" onclick="event.stopPropagation();delFolder(\''+c.id+'\',\''+f.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
       }
-      html+='<div class="sb-add-folder" onclick="requireUnlock(function(){openNewFolderModal(\''+c.id+'\')})">&#43; add year / folder</div>';
+      html+='<div class="sb-add-folder" onclick="openNewFolderModal(\''+c.id+'\')})">&#43; add year / folder</div>';
     }
   }
   el.innerHTML=html;
@@ -1027,7 +972,7 @@ var FIELD_LABELS={
   taxRate:'Tax Rate',status:'Status',notes:'Notes'
 };
 function getActorName(){
-  if(_sessionType==='creator')return 'Creator';
+  if(_sessionType==='creator')return 'Sierra Miller';
   if(_sessionType==='employee'&&_employeeId){
     var emp=(db.employees||[]).filter(function(e){return e.id===_employeeId;})[0];
     return emp?emp.name:'Employee';
@@ -1061,7 +1006,7 @@ function fmtAuditTime(ts){
 
 function updateField(id,field,val){
   var f=getActiveFolder();if(!f)return;
-  if(!_unlocked){
+  if(!canEdit()){
     // revert the input to its current saved value
     var r2=(f.rows||[]).filter(function(x){return x.id===id;})[0];
     if(r2){
@@ -1072,7 +1017,7 @@ function updateField(id,field,val){
         inp.value=savedVal;
       }
     }
-    requireUnlock(function(){});return;
+    return;
   }
   var r=(f.rows||[]).filter(function(x){return x.id===id;})[0];if(!r)return;
   var oldVal=r[field];
@@ -1682,17 +1627,17 @@ function renderTable(){
         var allCads=(f.rows||[]).reduce(function(acc,row){if(row.cad&&acc.indexOf(row.cad)<0)acc.push(row.cad);return acc;},[]).sort();
         if(r.cad&&allCads.indexOf(r.cad)<0)allCads.push(r.cad);
         var opts='';for(var ci=0;ci<allCads.length;ci++)opts+='<option'+(r.cad===allCads[ci]?' selected':'')+'>'+allCads[ci]+'</option>';
-        tbody+='<td style="min-width:'+fld.w+'px"><select'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'cad\',this.value)">'+opts+'</select></td>';
+        tbody+='<td style="min-width:'+fld.w+'px"><select'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'cad\',this.value)">'+opts+'</select></td>';
       }
-      else if(fld.k==='status'){var sopts='';for(var si=0;si<STATUS.length;si++)sopts+='<option'+(r.status===STATUS[si]?' selected':'')+'>'+STATUS[si]+'</option>';tbody+='<td style="min-width:'+fld.w+'px"><select'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'status\',this.value)">'+sopts+'</select></td>';}
+      else if(fld.k==='status'){var sopts='';for(var si=0;si<STATUS.length;si++)sopts+='<option'+(r.status===STATUS[si]?' selected':'')+'>'+STATUS[si]+'</option>';tbody+='<td style="min-width:'+fld.w+'px"><select'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'status\',this.value)">'+sopts+'</select></td>';}
       else if(fld.k==='pctChange'){tbody+='<td class="pct-cell calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:'+pctColor+'">'+esc(r.pctChange||'')+'</td>';}
       else if(fld.k==='mktRed'){tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.mktRed)||'')+'</td>';}
       else if(fld.k==='taxSavings'){tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.taxSavings)||'')+'</td>';}
-      else if(fld.k==='finalAppr'){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r.finalAppr))+'"'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/><span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';}
-      else if(fld.mv){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r[fld.k]))+'"'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';}
-      else{tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'"'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';}
+      else if(fld.k==='finalAppr'){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r.finalAppr))+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/><span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';}
+      else if(fld.mv){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r[fld.k]))+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';}
+      else{tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';}
     }
-    tbody+='<td>'+(_unlocked?'<button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button>':'')+'</td>';
+    tbody+='<td>'+(canEdit()?'<button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button>':'')+'</td>';
     tbody+='</tr>';
   }
   tbody+='</tbody>';
@@ -1994,7 +1939,7 @@ function renderClientOverview(cl){
 
   // Add year button
   h+='<div style="margin-top:16px">';
-  h+='<button class="btn btn-navy btn-sm" onclick="requireUnlock(function(){openNewFolderModal(\''+cl.id+'\')})">+ Add Year / Folder</button>';
+  h+='<button class="btn btn-navy btn-sm" onclick="openNewFolderModal(\''+cl.id+'\')})">+ Add Year / Folder</button>';
   h+='</div>';
 
   h+='</div>';
@@ -2025,13 +1970,13 @@ function renderMain(){
     +'<div class="pdf-divider"></div>'
     +'<button onclick="openDateRangeModal()">&#128197; Custom Date Range</button>'
     +'</div></div>'
-    +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="requireUnlock(function(){editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')})">&#9881; Edit Folder</button>'
-    +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="requireUnlock(function(){editClientModal(\''+activeClientId+'\')})">&#9881; Edit Client</button>'
+    +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')})">&#9881; Edit Folder</button>'
+    +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="editClientModal(\''+activeClientId+'\')})">&#9881; Edit Client</button>'
     +'</div></div>'
     +'<div class="tabs">'
     +'<button class="tab'+(activeTab==='ledger'?' active':'')+'" onclick="switchTab(\'ledger\')">Account Ledger</button>'
     +'<button class="tab'+(activeTab==='summary'?' active':'')+'" onclick="switchTab(\'summary\')">Summary View</button>'
-    +(isClientSession()?'':'<button class="tab'+(activeTab==='activity'?' active':'')+'" onclick="switchTab(\'activity\')">&#128221; Activity Log</button>')
+    +(isCreator()?'<button class="tab'+(activeTab==='activity'?' active':'')+'" onclick="switchTab(\'activity\')">&#128221; Activity Log</button>':'')
     +'</div><div id="tabContent"></div>';
   renderTab();
 }
@@ -2073,9 +2018,9 @@ function renderTab(){
       +'<option value="full"'+(viewMode==='full'?' selected':'')+'>Full View (+ property/type cols)</option>'
       +'</select>'
       +'<div style="margin-left:auto;display:flex;gap:6px">'
-      +'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="requireUnlock(undo)" title="Undo last change">&#8630; Undo</button>'
-      +'<button class="btn btn-navy btn-sm" onclick="requireUnlock(openPasteModal)">&#128203; Paste from Excel</button>'
-      +'<button class="btn btn-navy btn-sm" onclick="requireUnlock(addRow)">+ Add Row</button>'
+      +'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="undo()" title="Undo last change">&#8630; Undo</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="openPasteModal()">&#128203; Paste from Excel</button>'
+      +'<button class="btn btn-navy btn-sm" onclick="addRow()">+ Add Row</button>'
       +'</div></div>'
       +'<div id="tableWrap"></div>'
       +'<div class="legend">'
@@ -2092,6 +2037,7 @@ function renderTab(){
   }
 }
 function renderActivityLog(){
+  if(!isCreator())return;
   var f=getActiveFolder();if(!f)return;
   var el=document.getElementById('activityContent');if(!el)return;
   var log=f.auditLog||[];
