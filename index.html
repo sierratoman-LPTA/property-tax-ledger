@@ -8,7 +8,8 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222}
 :root{--navy:#002147;--gold:#C9A84C}
-#app{display:flex;height:100vh;overflow:hidden}
+#app{display:flex;height:100vh;overflow:hidden;visibility:hidden}
+#app.logged-in{visibility:visible}
 #sidebar{width:230px;min-width:230px;background:var(--navy);color:#fff;display:flex;flex-direction:column;overflow:hidden;height:100vh}
 #main{flex:1;overflow:auto;padding:18px}
 .sb-header{padding:16px 14px 10px;border-bottom:1px solid rgba(255,255,255,0.12);transition:background .15s}
@@ -104,6 +105,21 @@ tfoot td.tl{text-align:left}
 .empty-state{text-align:center;padding:60px 20px;color:#888}
 .empty-state h2{font-size:18px;margin-bottom:8px;color:#aaa}
 .yr-badge{display:inline-block;background:var(--gold);color:#000;font-size:9px;font-weight:700;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+/* ── Login Screen ── */
+.login-screen{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999}
+.login-box{background:#fff;border-radius:14px;padding:36px 40px;width:420px;max-width:95vw;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.login-box img{height:48px;margin-bottom:20px}
+.login-box h2{font-size:17px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.login-box p{font-size:12px;color:#888;margin-bottom:24px}
+.login-tabs{display:flex;border:2px solid #e0e6ef;border-radius:8px;overflow:hidden;margin-bottom:20px}
+.login-tab{flex:1;padding:9px;font-size:12px;font-weight:600;border:none;background:#fff;color:#888;cursor:pointer;transition:all .15s}
+.login-tab.active{background:var(--navy);color:#fff}
+.login-input{width:100%;border:1.5px solid #ccc;border-radius:7px;padding:11px 14px;font-size:14px;text-align:center;letter-spacing:2px;margin-bottom:8px;outline:none;transition:border .15s}
+.login-input:focus{border-color:var(--navy)}
+.login-error{color:#dc3545;font-size:11px;min-height:16px;margin-bottom:10px}
+.btn-login{width:100%;border:none;border-radius:7px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;background:var(--navy);color:#fff;letter-spacing:.3px;transition:opacity .15s}
+.btn-login:hover{opacity:.9}
+.login-hint{font-size:10px;color:#bbb;margin-top:14px}
 /* ── Command Center ── */
 .cc-wrap{padding:0;animation:fadeIn .35s ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -160,10 +176,10 @@ tfoot td.tl{text-align:left}
     <div class="sb-header" onclick="goHome()" style="cursor:pointer" title="Back to Dashboard">
       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAa8AAACZCAYAAACYP7UFAAAI10lEQVR4nO3d25qbNhQGUOjX939l9yKZr46DQQIdtqS1btKkHhA67B9hz8y2AQAAAAAAAAAAABDQ67fe7QAY0T+9G7A6IQaQT3gFIcQA0gmvYAQYwDXhFZBdGMA54RWYEAM4JrwGIMQA/iS8BiLAAH4RXoOxCwMQXsMSYsDKhNfghBiwIuE1CSEGrER4TUaIASsQXpMSYMDMhNfE7MKAWQmvBQgxYDZ77wasqmeY7Ptu3CuqNbbRx+3JdUe/th8lx/bONa94E/qtn+y8FrTiAiC2EeZk7zb2Pn80wgsKqllgZi9es18fZQkvIAwBRirhBYUovNCO8IKBrBCQK1wjzwmvis4W4SifroIeBBhXhFcFqd9Xtf/Wok3UpdiWp085I7wKu7PgBBg5VirqK10reYRXQU+/SVOIwd8EGEeEVwElf/ySABtPj+KqoLM64fVQjSIiwOBPwppPwuum2j/s1mPEMSiq7ehr3gmvGywiIlhxHq54zRwTXhn8ahHozxpk24RXMguGTxHmRIQ29LDqdfM/4ZXAQgGI5d/eDYhMaPGNudHf6/V6+VDTfaP3nZ3XF4oTo1h5rq587asTXh98KAPGYr2uSXi9sQhIYZ7EY0zWI7w2uy3GZ/7qg9UsH14mPMB4lg4vwUWuknOm9Ke9zGd9sJIlw8tjQqIY/ePKEVnba1gyvOAORXEcxmp+wgs6eN9xldx9Kdr/0xdzE17AtATYvIQXJFAEIRbhBY0dPSb06LAe/TEn4QUXFL/xGcP5CC9oqNVH4xXrv+mTuQgvCML3fNUnwOYhvOCEYjcfYzoHv4wSGmm9s/LLGr/TN7FC/M5Y2HlBIKsX1B/6gSvCC76IdGd618jXUDvARu4bhBc0YSdxjwDjG+EFB3oWNUH3JwHGkWnD62xCKg6sRHG+po/GM2V4pUzE/bcW7WFt5tlz+pBP04VX7h2UEONThLtwc/JvHh/ybqrwejL5hBgzm6UwCzB+TBNeJh0llJ5HbojKE2Bs2wTh9fqtdzugtNJF2jpJp6/iGzq8TDBYU4sdrfoS27DhZWJRmkeGY9G/axsyvAQXq/Do8Jz3v9Y1XHiZTMA7AbamYcLLBzOoKfIjQ7uvawJsPUP8Pi8TB6Cs0d8zDL/zElzUFnnXRTr9vpbQ4SW44BePDtMIsHWEDa9ZFxdQlwBbQ7j3vIQWLdWYb6PM4dfr9Zq10O/7vo8yDtwTaudlsgGlzBrM/BImvAQXrZlzMK4Q4aWIQB+zrz27r3l1D6/ZFw/QlwCbU/fwgh7cNK1FgM1HeMHiVglyATYX4QUsQ4DNQ3ixnFV2Gjn0CaMRXsBS7L7mILxYih0G2ybAZiC8gG3b1gt2ATa2cD/bkDZGK1QKDTX4GYjjsvNiGYrUNX3EKOy8gKWtuvsa5Zq/PXWx82IJoyxU+vBYejx2XnBTlIJXOphn/j1fZ1bdgY3KzgvgtxVDe1TCi+nVuJtW5OZlbMcgvGBwNYqtx2dEJ7yYml0Xdxjj+IQXTMDuqzwBFpvwAvhCgMUlvJjW6jsHyhBgMQkvyBC5kHl0yEqEF8CFyDctq2r+EzbcydGCTxmWs+pP3PjkJ3DEUi28DDK0p8DWpX/jeBxeBhJYiQCLITm8DBaj8MiwPI8O/yTA+jsML4MC41JYAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4Im958lTflX5vu9JbSx5rNRz3Dle62u+Om6p9tz9tfOfx34/Tu55n4zvnfZfne9u23r1QY3jX/Xrnbneqi/vnK/FcXOuqdS8rr0+Ur/m3b+5DWqt5MIssQBqte3ouGfHvBsWT9qzbXWKY293+/L1er1yim/qa/d933/adPV1LedBSnvuHO/nv3vOrbN+TFmPrY7bYrxLj/HR8VP+31Ub/inZqNpKDlzKsV6/pR6v9MRqXZhS1G7T+4S9OleUwldbap+P3gc118+3vqm1xnNfm/K60l/bQ057r14bZueVeneZcldwNlE//5762m/HvTt5Wlxvyzal9OPdO9faRblG24/mxd3dV8o5avXR0+t4l9LP33YjObvRVLXWeO3akePqvCXH8crn9T5t2xA7r5LF+e5gffu6z38vMSFrHPOplnf1KedaZdf14+jGq1dbSoswfjXX+Nlxc2rSCmOe0ydDhFdrTydnjQBb2WiFu1Swps6rFruuuzd+qVKu9f01T3eltdZ4yu6ihJy+mNUw4dWrmOc85qndlpXM1O9PCk2vx01XarRhtjVe8npme9JQYv4ME14RFixtHRX96Iu4dvta3dlH7+czI7c9x2i7r6Pd65N2h/nARhRRJn5OO1ImwAyLeIQF+s2+3//AwfvXfv57yTbmtqXFh2lqnL/WGh/tuHddrcOzNh7N5bs3ZEPsvEoWrREKYLQ2Pr1DeuLsjd3WbQGeK3Ezvm2Bdl6pDU4pWiWPVUvLNpb+NJPgOHZ1h1x611Jr55NzHT2c9WO0XUptvXfCd1098ky5ljDhlaLkwJzd0UeZDBE/tND7UVWvNvQUbSf+rvcauaPWGq9x3IjzvnQ7vgXZVR+GD687HXX0xuDTY7bSu21nd0S92xbZ1XP8Usf9DPLS4VHrOlqIWOhLShmLEW8m3uXs6sO857V/UerY73/PWZCpr81d5DWv967P8z/pN67dmTPvf949Tmm1gvrM1WOnGufNPU+rdq0qTHjVlhMMucVh5h3KTNcymrN5N9u4PF1DubuuWmv86XFLiBx6JdsW/rFhLbnb66PXHw3EbEVl22K9DxhRbuFMffzz/ver45YYlzuP3Z7OiydrKOcRU2pbjs5dIljPjpvSd6XmVU/v17ttz78Bf6nwynm/4GhhXHVsr6KeOuCl2ifAnsm9GciZo5GltLXlvKq1xu8c99OdG4lWStWbp329zGPDHznb+pz3oaJNsNKivc8SRY0ic7dvn4xJhPEs0X+5x6i1xnvUjpLvA9bw5K2bw9c8a856It8RAc/VWuNqx59WedsFAAAAAAAAAAAAAAAAAAAI4j8oqJPxD3mnJgAAAABJRU5ErkJggg==" style="height:32px;display:block;margin-bottom:6px" alt="Lane Property Tax Advocates"/>
       <h2 style="font-size:11px;opacity:.7;font-weight:500;letter-spacing:.3px">Property Tax Ledger <span class="sync-dot saving" id="syncDot"></span></h2>
-      <p class="ver" style="opacity:.35;font-size:9px">&#8962; Click logo to return home</p>
+      <p class="ver" id="homeHint" style="opacity:.35;font-size:9px">&#8962; Click logo to return home</p>
     </div>
     <div class="sb-tree" id="sbTree"></div>
-    <div class="sb-footer">
+    <div class="sb-footer" id="sbFooter">
       <button class="btn-sb btn-gold" onclick="requireUnlock(openNewClientModal)">+ New Client</button>
       <button class="btn-sb btn-ghost" onclick="requireUnlock(function(){document.getElementById('xlUpload').click()})">&#8679; Import Excel / CSV</button>
       <input type="file" id="xlUpload" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileUpload(event)"/>
@@ -175,6 +191,23 @@ tfoot td.tl{text-align:left}
   </div>
 
 <!-- Date Range PDF Modal -->
+<!-- Login Screen -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <img id="loginLogo" style="height:48px;margin-bottom:20px;display:block;margin-left:auto;margin-right:auto" alt="Lane Property Tax Advocates"/>
+    <h2>Property Tax Ledger</h2>
+    <p>Lane Property Tax Advocates</p>
+    <div class="login-tabs">
+      <button class="login-tab active" id="tabStaff" onclick="switchLoginTab('staff')">Staff Login</button>
+      <button class="login-tab" id="tabClient" onclick="switchLoginTab('client')">Client Access</button>
+    </div>
+    <input class="login-input" id="loginInput" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')submitLogin()"/>
+    <div class="login-error" id="loginError"></div>
+    <button class="btn-login" onclick="submitLogin()">Enter</button>
+    <div class="login-hint" id="loginHint">Staff access — full platform</div>
+  </div>
+</div>
+
 <div id="dateRangeModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
   <div class="modal-box" style="width:400px;text-align:center" onclick="event.stopPropagation()">
     <div style="font-size:28px;margin-bottom:8px">&#128197;</div>
@@ -220,6 +253,7 @@ tfoot td.tl{text-align:left}
     <div style="margin-top:16px">
       <div class="field"><label>Client Name *</label><input id="cm_name" placeholder="e.g. Silvestri Investments"/></div>
       <div class="field"><label>Prepared By (Firm)</label><input id="cm_firm" value="Lane Property Tax Advocates"/></div>
+      <div class="field"><label>Client Access Code <span style="font-size:10px;color:#888">(optional — share with client for their login)</span></label><input id="cm_code" placeholder="e.g. SILV2025" style="letter-spacing:1px"/></div>
     </div>
     <div class="modal-btns">
       <button class="btn" style="background:#eee;color:#333" onclick="document.getElementById('clientModal').style.display='none'">Cancel</button>
@@ -318,12 +352,17 @@ dbRef.on('value',function(snap){
   else{db=val;if(!db.clients)db.clients=[];}
   if(!_booted){
     _booted=true;
-    // Don't auto-select — always land on dashboard
+    // Show login screen on first load
+    initLoginScreen();
+    setTimeout(function(){setSyncDot('ok');},50);
+    return;
   }
+  // Re-render after data changes (when already logged in)
   renderSidebar();
   var f=getActiveFolder();
   if(f){renderTable();renderKPIs();}
   else if(activeClientId&&activeFolderId){renderMain();}
+  else if(isClientSession()){renderMain();}
   else{renderDashboard();}
   setTimeout(function(){setSyncDot('ok');},50);
 });
@@ -340,6 +379,8 @@ var undoStack=[];
 var _unlocked=false;
 var _PASS='798271';  // ← change this to your preferred password
 var _pendingAction=null;
+var _loginMode='staff';
+var _clientSession=null;
 
 // ── Lock / Unlock ──────────────────────────────────────────────────────────────
 function requireUnlock(fn){
@@ -392,6 +433,82 @@ function updateLockUI(){
 function checkLock(){
   if(!_unlocked){requireUnlock(function(){});return false;}
   return true;
+}
+
+// ── Login System ───────────────────────────────────────────────────────────────
+function initLoginScreen(){
+  // Copy logo from sidebar to login screen
+  var sidebarImg=document.querySelector('#sidebar img');
+  if(sidebarImg)document.getElementById('loginLogo').src=sidebarImg.src;
+  document.getElementById('loginInput').focus();
+}
+function applySessionUI(){
+  var isClient=isClientSession();
+  // Hide staff-only elements in client session
+  var hint=document.getElementById('homeHint');
+  var footer=document.getElementById('sbFooter');
+  var lockBar=document.querySelector('.lock-bar');
+  if(hint)hint.style.display=isClient?'none':'';
+  if(footer)footer.style.display=isClient?'none':'';
+  if(lockBar)lockBar.style.display=isClient?'none':'';
+}
+function switchLoginTab(mode){
+  _loginMode=mode;
+  document.getElementById('tabStaff').className='login-tab'+(mode==='staff'?' active':'');
+  document.getElementById('tabClient').className='login-tab'+(mode==='client'?' active':'');
+  document.getElementById('loginInput').value='';
+  document.getElementById('loginError').textContent='';
+  document.getElementById('loginInput').placeholder=mode==='staff'?'Enter staff password':'Enter client access code';
+  document.getElementById('loginHint').textContent=mode==='staff'?'Staff access — full platform':'Client access — view your data only';
+  document.getElementById('loginInput').focus();
+}
+function submitLogin(){
+  var val=document.getElementById('loginInput').value.trim();
+  if(!val){document.getElementById('loginError').textContent='Please enter a password.';return;}
+  if(_loginMode==='staff'){
+    if(val===_PASS){
+      _clientSession=null;
+      document.getElementById('loginScreen').style.display='none';
+      _unlocked=true;updateLockUI();
+      applySessionUI();
+      document.getElementById('app').className='logged-in';
+      renderSidebar();renderDashboard();
+    } else {
+      document.getElementById('loginError').textContent='Incorrect password.';
+      document.getElementById('loginInput').value='';
+      document.getElementById('loginInput').focus();
+    }
+  } else {
+    // Check against all client codes
+    var matched=null;
+    for(var i=0;i<(db.clients||[]).length;i++){
+      var c=db.clients[i];
+      if(c.clientCode&&c.clientCode.trim()&&val.toUpperCase()===c.clientCode.trim().toUpperCase()){
+        matched=c;break;
+      }
+    }
+    if(matched){
+      _clientSession=matched.id;
+      document.getElementById('loginScreen').style.display='none';
+      _unlocked=false;updateLockUI();
+      applySessionUI();
+      document.getElementById('app').className='logged-in';
+      // Navigate to that client's latest folder
+      activeClientId=matched.id;
+      activeFolderId=null;
+      renderSidebar();
+      renderMain();
+    } else {
+      document.getElementById('loginError').textContent='Access code not recognised.';
+      document.getElementById('loginInput').value='';
+      document.getElementById('loginInput').focus();
+    }
+  }
+}
+function isClientSession(){return _clientSession!==null;}
+function canSeeClient(cid){
+  if(!isClientSession())return true;
+  return cid===_clientSession;
 }
 var COUNTIES=['Harris','Brazoria','Montgomery','Fort Bend','Galveston','San Jacinto','Other'];
 var STATUS=['','Active Litigation','Arbitration','Reduced Below Last Year','Awaiting Formal','Completed'];
@@ -471,10 +588,11 @@ function sortedRows(rows){
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 function renderSidebar(){
   var el=document.getElementById('sbTree');
-  if(!db.clients||!db.clients.length){el.innerHTML='<div style="padding:16px 14px;font-size:11px;opacity:.5">No clients yet.<br>Click + New Client.</div>';return;}
+  var clients2=isClientSession()?(db.clients||[]).filter(function(c){return c.id===_clientSession;}):(db.clients||[]);
+  if(!clients2.length){el.innerHTML='<div style="padding:16px 14px;font-size:11px;opacity:.5">No clients yet.<br>Click + New Client.</div>';return;}
   var html='';
-  for(var i=0;i<db.clients.length;i++){
-    var c=db.clients[i];var exp=c.expanded!==false;
+  for(var i=0;i<clients2.length;i++){
+    var c=clients2[i];var exp=c.expanded!==false;
     html+='<div class="sb-client'+(activeFolderId===null&&activeClientId===c.id?' active':'')+'" onclick="toggleClient(\''+c.id+'\')">'
       +'<button class="sb-toggle" onclick="event.stopPropagation();toggleExpand(\''+c.id+'\')">'+(exp?'&#9660;':'&#9654;')+'</button>'
       +'<span class="cname">'+esc(c.name)+'</span>'
@@ -497,7 +615,10 @@ function renderSidebar(){
 function toggleExpand(cid){var c=getClient(cid);if(!c)return;c.expanded=c.expanded===false?true:false;saveDB();renderSidebar();}
 function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;renderSidebar();renderMain();}
 function selectFolder(cid,fid){activeClientId=cid;activeFolderId=fid;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;renderSidebar();renderMain();}
-function goHome(){activeClientId=null;activeFolderId=null;renderSidebar();renderDashboard();}
+function goHome(){
+  if(isClientSession())return; // clients can't access command center
+  activeClientId=null;activeFolderId=null;renderSidebar();renderDashboard();
+}
 
 // ── Client CRUD ────────────────────────────────────────────────────────────────
 function openNewClientModal(){
@@ -505,19 +626,21 @@ function openNewClientModal(){
   document.getElementById('cmTitle').textContent='New Client';
   document.getElementById('cm_name').value='';
   document.getElementById('cm_firm').value='Lane Property Tax Advocates';
+  document.getElementById('cm_code').value='';
   document.getElementById('clientModal').style.display='flex';
   setTimeout(function(){document.getElementById('cm_name').focus();},100);
 }
 function saveClient(){
   var name=document.getElementById('cm_name').value.trim();
   var firm=document.getElementById('cm_firm').value.trim();
+  var code=document.getElementById('cm_code').value.trim().toUpperCase();
   if(!name){alert('Please enter a client name.');return;}
   if(!checkLock())return;
-  if(editingClientId){var c=getClient(editingClientId);if(c){c.name=name;c.firm=firm;}}
+  if(editingClientId){var c=getClient(editingClientId);if(c){c.name=name;c.firm=firm;c.clientCode=code;}}
   else{
     var yr=String(new Date().getFullYear());
     var nf={id:uid(),year:yr,labels:defaultLabels(yr),rows:[emptyRow()]};
-    var nc={id:uid(),name:name,firm:firm,expanded:true,folders:[nf]};
+    var nc={id:uid(),name:name,firm:firm,clientCode:code,expanded:true,folders:[nf]};
     if(!db.clients)db.clients=[];
     db.clients.push(nc);activeClientId=nc.id;activeFolderId=nf.id;
   }
@@ -528,6 +651,7 @@ function editClientModal(cid){
   document.getElementById('cmTitle').textContent='Edit Client';
   document.getElementById('cm_name').value=c.name||'';
   document.getElementById('cm_firm').value=c.firm||'';
+  document.getElementById('cm_code').value=c.clientCode||'';
   document.getElementById('clientModal').style.display='flex';
 }
 function delClient(cid){
