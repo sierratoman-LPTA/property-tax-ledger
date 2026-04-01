@@ -751,7 +751,7 @@ function defaultLabels(year){
 function emptyRow(){
   return{id:uid(),cad:'Harris',account:'',address:'',propName:'',propType:'',impType:'',
     owner:'',priorVal:'',prelim:'',prelimAppr:'',finalAppr:'',finalMkt:'',
-    mktRed:'',pctChange:'',taxRate:'',taxSavings:'',status:'',notes:''};
+    mktRed:'',pctChange:'',taxRate:'',taxSavings:'',status:'',hearingDate:'',arbDate:'',notes:''};
 }
 
 function recalcRow(r){
@@ -835,12 +835,21 @@ function setSortDir(idx,dir){
   sortLevels[idx].dir=dir;
   if(idx===0){sortDir=dir;sortKey=sortLevels[0].key;}
   renderTable();
+  // Re-open sort panel after re-render
+  setTimeout(function(){
+    var sp=document.getElementById('sortPanel');
+    if(sp)sp.classList.add('open');
+  },10);
 }
 function removeSortLevel(idx){
   sortLevels.splice(idx,1);
   if(sortLevels.length){sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;}
   else{sortKey=null;sortDir=1;}
   renderTable();
+  setTimeout(function(){
+    var sp=document.getElementById('sortPanel');
+    if(sp&&sortLevels.length)sp.classList.add('open');
+  },10);
 }
 function toggleSortLevelDir(idx){
   if(!sortLevels[idx])return;
@@ -1179,7 +1188,7 @@ var FIELD_LABELS={
   propType:'Property Type',impType:'Improvement Type',owner:'Owner',
   priorVal:'Prior Year Value',prelim:'Prelim Market Value',prelimAppr:'Prelim Appr Value',
   finalAppr:'Final Appr Value',finalMkt:'Final Market Value',
-  taxRate:'Tax Rate',status:'Status',notes:'Notes'
+  taxRate:'Tax Rate',status:'Status',hearingDate:'Formal Hearing Date',arbDate:'Arbitration Date',notes:'Notes'
 };
 function getActorName(){
   if(_sessionType==='creator')return 'Sierra Miller';
@@ -1263,7 +1272,9 @@ var PFIELDS=[
   {k:'owner',label:'Owner/Assessee'},{k:'priorVal',label:'Prior Year Value'},
   {k:'prelim',label:'Prelim Market Value'},{k:'prelimAppr',label:'Prelim Appr Value'},
   {k:'finalAppr',label:'Final Appr Value'},{k:'finalMkt',label:'Final Market Value'},
-  {k:'taxRate',label:'Tax Rate'},{k:'status',label:'Status'},{k:'notes',label:'Notes'},
+  {k:'taxRate',label:'Tax Rate'},{k:'status',label:'Status'},
+  {k:'hearingDate',label:'Formal Hearing Date'},{k:'arbDate',label:'Arbitration Date'},
+  {k:'notes',label:'Notes'},
 ];
 var AMAP={
   cad:['cad','county','district'],account:['account','acct','accountno','accountnumber'],
@@ -1277,7 +1288,10 @@ var AMAP={
   finalAppr:['finalappr','finalappraised','appraisedvalue','finalapprvalue'],
   finalMkt:['finalmkt','finalmarket','finalmarketvalue','finalmktval'],
   taxRate:['taxrate','rate','taxratepct'],
-  status:['status','casestatus'],notes:['notes','note','comments']
+  status:['status','casestatus'],
+  hearingDate:['hearingdate','formaldate','formalhearing','hearingdt'],
+  arbDate:['arbdate','arbitrationdate','arbhearing','arbdt'],
+  notes:['notes','note','comments']
 };
 function autoMatch(h,key){
   if(!h)return false;
@@ -1846,71 +1860,73 @@ function exportPDF(mode){
   closePdfMenu();
   var cl=getClient(activeClientId);
   if(!cl||!cl.folders||!cl.folders.length){alert('Please select a client first.');return;}
-  var folders=mode==='year'?[getActiveFolder()]:(cl.folders||[]);
-  if(!folders[0]){alert('Please select a year folder first.');return;}
-  buildJsPDF(cl,folders);
+  if(mode==='year'){
+    var af=getActiveFolder();
+    if(!af){alert('Please open a specific year folder first to export the current year summary.');return;}
+    buildJsPDF(cl,[af],'Current Year Summary — '+af.year);
+  } else {
+    buildJsPDF(cl,cl.folders||[],'All Years Summary');
+  }
 }
 
-function buildJsPDF(cl,folders){
+function buildJsPDF(cl,folders,reportTitle){
   var doc=new jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'letter'});
   var pageW=doc.internal.pageSize.getWidth();
   var pageH=doc.internal.pageSize.getHeight();
   var navy=[0,33,71],gold=[201,168,76],white=[255,255,255],green=[21,87,36],lightGreen=[212,237,218];
   var margin=32;
+  var logoEl=document.querySelector('#sidebar img');
+  var logoSrc=logoEl?logoEl.src:null;
 
   function addPageHeader(title){
     doc.setFillColor(navy[0],navy[1],navy[2]);
-    doc.rect(0,0,pageW,36,'F');
+    doc.rect(0,0,pageW,40,'F');
     doc.setFillColor(gold[0],gold[1],gold[2]);
-    doc.rect(0,36,pageW,2,'F');
-    // Logo placeholder text (base64 logo rendering is complex in jsPDF — use firm name)
-    doc.setTextColor(gold[0],gold[1],gold[2]);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(11);
-    doc.text('LANE PROPERTY TAX ADVOCATES',margin,24);
-    doc.setTextColor(white[0],white[1],white[2]);
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(9);
-    doc.text(title,pageW-margin,24,{align:'right'});
+    doc.rect(0,40,pageW,2,'F');
+    if(logoSrc){
+      try{doc.addImage(logoSrc,'PNG',margin,6,80,28);}catch(e){
+        doc.setTextColor(gold[0],gold[1],gold[2]);doc.setFont('helvetica','bold');doc.setFontSize(10);
+        doc.text('LANE PROPERTY TAX ADVOCATES',margin,26);
+      }
+    } else {
+      doc.setTextColor(gold[0],gold[1],gold[2]);doc.setFont('helvetica','bold');doc.setFontSize(10);
+      doc.text('LANE PROPERTY TAX ADVOCATES',margin,26);
+    }
+    doc.setTextColor(white[0],white[1],white[2]);doc.setFont('helvetica','normal');doc.setFontSize(9);
+    doc.text(title,pageW-margin,26,{align:'right'});
   }
 
   function addPageFooter(pageNum,totalPages){
-    doc.setFillColor(240,242,245);
-    doc.rect(0,pageH-20,pageW,20,'F');
-    doc.setTextColor(150,150,150);
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(7);
+    doc.setFillColor(240,242,245);doc.rect(0,pageH-20,pageW,20,'F');
+    doc.setTextColor(150,150,150);doc.setFont('helvetica','normal');doc.setFontSize(7);
     doc.text('Confidential — Lane Property Tax Advocates',margin,pageH-7);
     doc.text('Page '+pageNum+' of '+totalPages,pageW-margin,pageH-7,{align:'right'});
     doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),pageW/2,pageH-7,{align:'center'});
   }
 
-  var pageCount=0;
   var allRows=[];
   for(var fi=0;fi<folders.length;fi++)allRows=allRows.concat(folders[fi].rows||[]);
   var totalSavings=totMV(allRows,'taxSavings');
   var totalReduced=allRows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
   var totalLit=allRows.filter(function(r){return r.status==='Active Litigation';}).length;
   var totalArb=allRows.filter(function(r){return r.status==='Arbitration';}).length;
+  var totalFormal=allRows.filter(function(r){return r.status==='Awaiting Formal';}).length;
+  var totalReducedCount=allRows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+  var yearRange=folders.length===1?folders[0].year:folders[0].year+' – '+folders[folders.length-1].year;
+  var headerTitle=cl.name+' — '+(reportTitle||'Property Tax Report');
 
   // ── Page 1: Executive Summary ──
-  pageCount++;
-  addPageHeader(cl.name+' — Property Tax Report');
+  addPageHeader(headerTitle);
+  var y=52;
 
-  var y=56;
-  // Client name hero
+  // Client hero banner
   doc.setFillColor(navy[0],navy[1],navy[2]);
   doc.rect(margin,y,pageW-margin*2,48,'F');
-  doc.setTextColor(gold[0],gold[1],gold[2]);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(18);
+  doc.setTextColor(gold[0],gold[1],gold[2]);doc.setFont('helvetica','bold');doc.setFontSize(18);
   doc.text(cl.name,margin+14,y+22);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  doc.setTextColor(255,255,255);
-  var yearRange=folders.length===1?folders[0].year:folders[0].year+' – '+folders[folders.length-1].year;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(255,255,255);
   doc.text('Tax Year '+yearRange+' • Prepared by Lane Property Tax Advocates',margin+14,y+38);
-  y+=62;
+  y+=58;
 
   // Savings banner
   if(totalSavings>0){
@@ -1918,135 +1934,143 @@ function buildJsPDF(cl,folders){
     doc.setDrawColor(40,167,69);
     doc.roundedRect(margin,y,pageW-margin*2,44,4,4,'FD');
     doc.setTextColor(green[0],green[1],green[2]);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(9);
+    doc.setFont('helvetica','bold');doc.setFontSize(9);
     doc.text('TOTAL TAX SAVINGS',pageW/2,y+14,{align:'center'});
-    doc.setFontSize(22);
-    doc.text(fmtMV(totalSavings),pageW/2,y+34,{align:'center'});
+    doc.setFontSize(22);doc.text(fmtMV(totalSavings),pageW/2,y+34,{align:'center'});
     y+=54;
   }
 
   // KPI strip
   var kpis=[
     {label:'Total Accounts',val:String(allRows.length)},
-    {label:'Accounts Reduced',val:String(allRows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length)},
+    {label:'Accounts Reduced',val:String(totalReducedCount)},
     {label:'Active Litigation',val:String(totalLit)},
     {label:'Arbitration',val:String(totalArb)},
+    {label:'Awaiting Formal',val:String(totalFormal)},
     {label:'Total Value Reduced',val:totalReduced>0?fmtMV(totalReduced):'—'},
-    {label:'Years Tracked',val:String(folders.length)},
   ];
   var kw=(pageW-margin*2)/kpis.length;
   for(var ki=0;ki<kpis.length;ki++){
     var kx=margin+ki*kw;
-    doc.setFillColor(248,249,251);
-    doc.setDrawColor(220,224,230);
-    doc.rect(kx,y,kw,40,'FD');
-    doc.setTextColor(navy[0],navy[1],navy[2]);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(14);
+    doc.setFillColor(248,249,251);doc.setDrawColor(220,224,230);doc.rect(kx,y,kw,40,'FD');
+    doc.setTextColor(navy[0],navy[1],navy[2]);doc.setFont('helvetica','bold');doc.setFontSize(14);
     doc.text(kpis[ki].val,kx+kw/2,y+22,{align:'center'});
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(7);
-    doc.setTextColor(120,120,120);
+    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);
     doc.text(kpis[ki].label.toUpperCase(),kx+kw/2,y+33,{align:'center'});
   }
   y+=50;
 
-  // Year-by-year table
+  // Two columns: County Breakdown + Top 5 Reductions
+  var colW=(pageW-margin*2-14)/2;
+  doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(navy[0],navy[1],navy[2]);
+  doc.text('ACCOUNTS BY COUNTY',margin,y+11);
+  doc.text('TOP 5 REDUCTIONS',margin+colW+14,y+11);
+  y+=16;
+
+  var detectedCads=allRows.reduce(function(acc,r){if(r.cad&&acc.indexOf(r.cad)<0)acc.push(r.cad);return acc;},[]).sort();
+  var ctyBody=detectedCads.map(function(co){
+    var cr=allRows.filter(function(r){return r.cad===co;});
+    var cs=totMV(cr,'taxSavings');
+    return[co,String(cr.length),(cr.length/allRows.length*100).toFixed(1)+'%',cs>0?fmtMV(cs):'—'];
+  });
+  doc.autoTable({startY:y,head:[['County','Accts','%','Tax Savings']],body:ctyBody,
+    margin:{left:margin,right:margin+colW+14},tableWidth:colW,
+    headStyles:{fillColor:navy,textColor:white,fontSize:7,fontStyle:'bold'},
+    bodyStyles:{fontSize:7.5},alternateRowStyles:{fillColor:[248,249,251]},
+    columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right',textColor:green}},
+  });
+  var ctyY=doc.lastAutoTable.finalY;
+
+  var top5=allRows.map(function(r){
+    var red=(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0);
+    return{addr:(r.address||r.propName||'—').substring(0,32),owner:(r.owner||'').substring(0,20),red:red,prior:parseMV(r.priorVal)||0,final:parseMV(r.finalAppr)||0};
+  }).filter(function(r){return r.red>0;}).sort(function(a,b){return b.red-a.red;}).slice(0,5);
+  doc.autoTable({startY:y,head:[['Property/Address','Owner','Prior Value','Final Appr','$ Reduced']],body:top5.map(function(r){return[r.addr,r.owner,fmtMV(r.prior),fmtMV(r.final),fmtMV(r.red)];}),
+    margin:{left:margin+colW+14,right:margin},tableWidth:colW,
+    headStyles:{fillColor:navy,textColor:white,fontSize:7,fontStyle:'bold'},
+    bodyStyles:{fontSize:7.5},alternateRowStyles:{fillColor:[248,249,251]},
+    columnStyles:{2:{halign:'right'},3:{halign:'right'},4:{halign:'right',textColor:green,fontStyle:'bold'}},
+  });
+  y=Math.max(ctyY,doc.lastAutoTable.finalY)+14;
+
+  // Case Status Summary
+  if(y<pageH-100){
+    doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(navy[0],navy[1],navy[2]);
+    doc.text('CASE STATUS SUMMARY',margin,y+11);y+=16;
+    var statuses=['Active Litigation','Arbitration','Awaiting Formal','Reduced Below Last Year'];
+    var stColors={'Active Litigation':[255,243,205],'Arbitration':[204,229,255],'Awaiting Formal':[234,213,245],'Reduced Below Last Year':[212,237,218]};
+    var stBody=statuses.map(function(s){
+      var sr=allRows.filter(function(r){return r.status===s;});
+      var sred=sr.reduce(function(a,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return a+(b&&fv&&fv<b?b-fv:0);},0);
+      return[s,String(sr.length),allRows.length?(sr.length/allRows.length*100).toFixed(1)+'%':'0%',sred>0?fmtMV(sred):'—',totMV(sr,'taxSavings')>0?fmtMV(totMV(sr,'taxSavings')):'—'];
+    });
+    doc.autoTable({startY:y,head:[['Status','Accounts','% of Portfolio','Value Reduced','Tax Savings']],body:stBody,
+      margin:{left:margin,right:margin},
+      headStyles:{fillColor:navy,textColor:white,fontSize:7,fontStyle:'bold'},
+      bodyStyles:{fontSize:8},
+      didParseCell:function(d){if(d.section==='body'){var col=stColors[d.cell.raw];if(col)d.cell.styles.fillColor=col;}},
+      columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right',textColor:green,fontStyle:'bold'}},
+    });
+    y=doc.lastAutoTable.finalY+14;
+  }
+
+  // Year-by-year breakdown (multi-year only)
   if(folders.length>1){
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(9);
-    doc.setTextColor(navy[0],navy[1],navy[2]);
-    doc.text('YEAR-BY-YEAR BREAKDOWN',margin,y+12);
-    y+=18;
-    var ybHead=[['Year','Accounts','Prior Value','Prelim Value','Value Reduced','Tax Savings']];
+    doc.addPage();addPageHeader(headerTitle);
+    doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(navy[0],navy[1],navy[2]);
+    doc.text('YEAR-BY-YEAR BREAKDOWN',margin,62);
     var ybBody=folders.map(function(f){
       var fr=f.rows||[];
       var red=fr.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
-      return[f.year,String(fr.length),fmtMV(totMV(fr,'priorVal'))||'—',fmtMV(totMV(fr,'prelim'))||'—',red>0?fmtMV(red):'—',totMV(fr,'taxSavings')>0?fmtMV(totMV(fr,'taxSavings')):'—'];
+      return[f.year,String(fr.length),fmtMV(totMV(fr,'priorVal'))||'—',fmtMV(totMV(fr,'prelim'))||'—',fmtMV(totMV(fr,'finalAppr'))||'—',red>0?fmtMV(red):'—',totMV(fr,'taxSavings')>0?fmtMV(totMV(fr,'taxSavings')):'—'];
     });
-    doc.autoTable({startY:y,head:ybHead,body:ybBody,margin:{left:margin,right:margin},
+    doc.autoTable({startY:68,head:[['Year','Accounts','Prior Value','Prelim Value','Final Appr Value','Value Reduced','Tax Savings']],body:ybBody,
+      margin:{left:margin,right:margin},
       headStyles:{fillColor:navy,textColor:white,fontSize:8,fontStyle:'bold'},
       bodyStyles:{fontSize:8},alternateRowStyles:{fillColor:[248,249,251]},
-      columnStyles:{2:{halign:'right'},3:{halign:'right'},4:{halign:'right',textColor:green},5:{halign:'right',textColor:green}},
-      didDrawPage:function(d){addPageHeader(cl.name+' — Executive Summary');}
+      columnStyles:{2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right',textColor:green},6:{halign:'right',textColor:green,fontStyle:'bold'}},
     });
-    y=doc.lastAutoTable.finalY+16;
   }
 
-  // ── Per-year ledger pages ──
+  // Per-year account ledger pages
   for(var fi=0;fi<folders.length;fi++){
-    var f=folders[fi];var rows=f.rows||[];var L=f.labels;
+    var f=folders[fi];var rows=f.rows||[];
     if(rows.length===0)continue;
-
-    doc.addPage();pageCount++;
-    addPageHeader(cl.name+' — '+f.year+' Account Ledger');
-
-    var head=[[
-      '#','CAD','Account #','Address','Owner',
-      L.prior.replace(/\d{4}/g,'').trim()||'Prior Value',
-      'Prelim Value','Final Appr','Final Mkt',
-      'Reduction','% Chg','Savings','Status'
-    ]];
-    var body=rows.map(function(r,i){
-      return[
-        String(i+1),r.cad||'',r.account||'',
-        (r.address||'').substring(0,28),
-        (r.owner||'').substring(0,22),
-        parseMV(r.priorVal)?fmtMV(r.priorVal):'',
-        parseMV(r.prelim)?fmtMV(r.prelim):'',
-        parseMV(r.finalAppr)?fmtMV(r.finalAppr):'',
-        parseMV(r.finalMkt)?fmtMV(r.finalMkt):'',
-        parseMV(r.mktRed)>0?fmtMV(r.mktRed):'',
-        r.pctChange||'',
-        parseMV(r.taxSavings)>0?fmtMV(r.taxSavings):'',
-        (r.status===''||r.status==='None')?'':r.status
-      ];
-    });
+    doc.addPage();addPageHeader(cl.name+' — '+f.year+' Account Ledger');
     var STATUS_COLORS={'Active Litigation':[255,243,205],'Arbitration':[204,229,255],'Reduced Below Last Year':[212,237,218],'Awaiting Formal':[234,213,245]};
-    doc.autoTable({
-      startY:46,head:head,body:body,margin:{left:margin,right:margin},
-      headStyles:{fillColor:navy,textColor:white,fontSize:7,fontStyle:'bold'},
-      bodyStyles:{fontSize:6.5},
-      alternateRowStyles:{fillColor:[248,249,251]},
-      columnStyles:{
-        0:{cellWidth:16,halign:'center'},
-        1:{cellWidth:36},2:{cellWidth:52},3:{cellWidth:80},4:{cellWidth:70},
+    var lhead=[['#','CAD','Account #','Address','Owner','Prior Value','Prelim Value','Final Appr','Final Mkt','Reduction','% Chg','Savings','Status','Hearing Dt','Arb Dt']];
+    var lbody=rows.map(function(r,i){return[
+      String(i+1),r.cad||'',r.account||'',
+      (r.address||'').substring(0,26),(r.owner||'').substring(0,20),
+      parseMV(r.priorVal)?fmtMV(r.priorVal):'',parseMV(r.prelim)?fmtMV(r.prelim):'',
+      parseMV(r.finalAppr)?fmtMV(r.finalAppr):'',parseMV(r.finalMkt)?fmtMV(r.finalMkt):'',
+      parseMV(r.mktRed)>0?fmtMV(r.mktRed):'',r.pctChange||'',
+      parseMV(r.taxSavings)>0?fmtMV(r.taxSavings):'',
+      (r.status===''||r.status==='None')?'':r.status,
+      r.hearingDate||'',r.arbDate||''
+    ];});
+    doc.autoTable({startY:50,head:lhead,body:lbody,margin:{left:margin,right:margin},
+      headStyles:{fillColor:navy,textColor:white,fontSize:6.5,fontStyle:'bold'},
+      bodyStyles:{fontSize:6},
+      columnStyles:{0:{cellWidth:14,halign:'center'},1:{cellWidth:32},2:{cellWidth:48},3:{cellWidth:70},4:{cellWidth:60},
         5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'},
-        9:{halign:'right',textColor:green,fontStyle:'bold'},
-        10:{halign:'right'},
-        11:{halign:'right',textColor:green,fontStyle:'bold'},
-        12:{cellWidth:55}
-      },
-      didParseCell:function(d){
-        if(d.section==='body'){
-          var status=rows[d.row.index]?rows[d.row.index].status:'';
-          var col=STATUS_COLORS[status];
-          if(col)d.cell.styles.fillColor=col;
-        }
-      },
-      didDrawPage:function(d){addPageHeader(cl.name+' — '+f.year+' Account Ledger');}
+        9:{halign:'right',textColor:green,fontStyle:'bold'},10:{halign:'right'},
+        11:{halign:'right',textColor:green,fontStyle:'bold'},12:{cellWidth:48},13:{cellWidth:44},14:{cellWidth:44}},
+      didParseCell:function(d){if(d.section==='body'){var st=rows[d.row.index]?rows[d.row.index].status:'';var col=STATUS_COLORS[st];if(col)d.cell.styles.fillColor=col;}},
+      didDrawPage:function(){addPageHeader(cl.name+' — '+f.year+' Account Ledger');}
     });
-
-    // Totals footer
     var ty=doc.lastAutoTable.finalY;
-    doc.setFillColor(navy[0],navy[1],navy[2]);
-    doc.rect(margin,ty,pageW-margin*2,18,'F');
-    doc.setTextColor(white[0],white[1],white[2]);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(8);
+    doc.setFillColor(navy[0],navy[1],navy[2]);doc.rect(margin,ty,pageW-margin*2,18,'F');
+    doc.setTextColor(white[0],white[1],white[2]);doc.setFont('helvetica','bold');doc.setFontSize(8);
     doc.text('TOTALS — '+rows.length+' accounts',margin+6,ty+12);
     var sav=totMV(rows,'taxSavings');
     if(sav>0){doc.setTextColor(gold[0],gold[1],gold[2]);doc.text(fmtMV(sav)+' Tax Savings',pageW-margin-6,ty+12,{align:'right'});}
   }
 
-  // Add page numbers to all pages
   var totalPages=doc.internal.getNumberOfPages();
   for(var p=1;p<=totalPages;p++){doc.setPage(p);addPageFooter(p,totalPages);}
-
-  doc.save(cl.name+' — Property Tax Report.pdf');
+  doc.save(cl.name+' — '+(reportTitle||'Property Tax Report')+'.pdf');
 }
-
 function openDateRangeModal(){
   closePdfMenu();
   var cl=getClient(activeClientId);
@@ -2077,7 +2101,7 @@ function exportPDFRange(){
   var folders=cl.folders.filter(function(f){return f.year>=from&&f.year<=to;});
   if(!folders.length){alert('No folders found in that range.');return;}
   document.getElementById('dateRangeModal').style.display='none';
-  buildJsPDF(cl,folders);
+  buildJsPDF(cl,folders,'Custom Range — '+from+(from!==to?' to '+to:''));
 }
 
 
@@ -2123,6 +2147,8 @@ function getFields(labels){
     {k:'taxRate',label:'Tax Rate',w:90,mv:false,full:true},
     {k:'taxSavings',label:'Tax Savings *',w:120,mv:true,calc:true},
     {k:'status',label:'Status',w:155,mv:false},
+    {k:'hearingDate',label:'Formal Hearing Date',w:120,mv:false},
+    {k:'arbDate',label:'Arbitration Date',w:120,mv:false},
     {k:'notes',label:'Notes',w:130,mv:false},
   ];
   return viewMode==='full'?base:base.filter(function(f){return !f.full;});
@@ -2171,6 +2197,14 @@ function renderTable(){
       else if(fld.k==='taxSavings'){tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.taxSavings)||'')+'</td>';}
       else if(fld.k==='finalAppr'){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r.finalAppr))+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/><span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';}
       else if(fld.mv){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r[fld.k]))+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';}
+      else if(fld.k==='hearingDate'||fld.k==='arbDate'){
+        var dval=r[fld.k]||'';
+        var dDisplay=dval?new Date(dval+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+        var isPast=dval&&new Date(dval)<new Date();
+        var isUpcoming=dval&&!isPast&&(new Date(dval)-new Date())<7*24*60*60*1000;
+        var dcolor=isPast?'#dc3545':isUpcoming?'#856404':'#222';
+        tbody+='<td style="min-width:'+fld.w+'px"><input type="date" value="'+esc(dval)+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)" style="font-size:11px;color:'+dcolor+';font-weight:'+(dval?'600':'400')+'" title="'+(isPast?'Past date':isUpcoming?'Coming up soon':'')+'" /></td>';
+      }
       else{tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';}
     }
     tbody+='<td>'+(canEdit()?'<button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button>':'')+'</td>';
