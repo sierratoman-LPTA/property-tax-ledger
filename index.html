@@ -2016,189 +2016,6 @@ function renderClientOverview(cl){
 }
 
 // ── Client Print Report ────────────────────────────────────────────────────────
-function printClientReport(){
-  var f=getActiveFolder();var cl=getClient(activeClientId);
-  if(!f||!cl)return;
-  var rows=f.rows||[];
-  var L=f.labels;
-  var today=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-
-  // Aggregate stats
-  var totalSavings=totMV(rows,'taxSavings');
-  var totalReduced=rows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
-  var reducedCount=rows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
-  var pendingCount=rows.filter(function(r){return r.status==='Active Litigation'||r.status==='Arbitration'||r.status==='Awaiting Formal';}).length;
-
-  // Get logo
-  var logoEl=document.querySelector('#sidebar img');
-  var logoSrc=logoEl?logoEl.src:'';
-
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>';
-  html+='<title>'+cl.name+' — '+f.year+' Property Tax Report</title>';
-  html+='<style>';
-  html+='*{box-sizing:border-box;margin:0;padding:0}';
-  html+='body{font-family:Arial,sans-serif;font-size:11pt;color:#222;background:#fff}';
-  html+='@page{size:letter;margin:.75in}';
-  html+='@media print{.no-print{display:none}.page-break{page-break-before:always}}';
-
-  // Cover styles
-  html+='.cover{padding:40px 0 30px}';
-  html+='.cover-logo{margin-bottom:24px}';
-  html+='.cover-logo img{height:48px}';
-  html+='.cover-bar{background:#002147;padding:24px 32px;border-radius:8px;margin-bottom:24px}';
-  html+='.cover-bar h1{color:#C9A84C;font-size:22pt;font-weight:800;margin-bottom:4px}';
-  html+='.cover-bar p{color:rgba(255,255,255,.7);font-size:10pt}';
-  html+='.savings-banner{background:#d4edda;border:2px solid #28a745;border-radius:8px;padding:24px;text-align:center;margin-bottom:24px}';
-  html+='.savings-banner .lbl{font-size:10pt;color:#155724;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}';
-  html+='.savings-banner .val{font-size:32pt;font-weight:800;color:#155724}';
-  html+='.kpi-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px}';
-  html+='.kpi-card{border:1px solid #ddd;border-radius:6px;padding:14px;text-align:center}';
-  html+='.kpi-card .kv{font-size:20pt;font-weight:700;color:#002147}';
-  html+='.kpi-card .kl{font-size:8pt;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}';
-
-  // Table styles
-  html+='.section-hdr{background:#002147;color:#C9A84C;font-size:11pt;font-weight:700;padding:10px 14px;border-radius:6px 6px 0 0;margin-top:28px}';
-  html+='.rpt-table{width:100%;border-collapse:collapse;font-size:9pt}';
-  html+='.rpt-table th{background:#002147;color:#fff;padding:7px 8px;text-align:left;font-weight:600;white-space:nowrap}';
-  html+='.rpt-table th.r{text-align:right}';
-  html+='.rpt-table td{padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top}';
-  html+='.rpt-table td.r{text-align:right}';
-  html+='.rpt-table tr:nth-child(even) td{background:#f8f9fb}';
-  html+='.rpt-table tr.lit td{background:#FFF3CD}';
-  html+='.rpt-table tr.arb td{background:#CCE5FF}';
-  html+='.rpt-table tr.red-row td{background:#D4EDDA}';
-  html+='.rpt-table tr.formal td{background:#EAD5F5}';
-  html+='.rpt-table tfoot td{background:#002147;color:#fff;font-weight:700;padding:7px 8px}';
-  html+='.rpt-table tfoot td.r{text-align:right}';
-  html+='.pending-badge{background:#FFC107;color:#333;font-size:7pt;font-weight:700;padding:1px 5px;border-radius:3px;white-space:nowrap}';
-  html+='.red-badge{background:#28a745;color:#fff;font-size:7pt;font-weight:700;padding:1px 5px;border-radius:3px;white-space:nowrap}';
-  html+='.footer{margin-top:32px;padding-top:12px;border-top:1px solid #ddd;font-size:8pt;color:#aaa;text-align:center}';
-  html+='</style></head><body>';
-
-  // ── Print button (no-print)
-  html+='<div class="no-print" style="position:fixed;top:16px;right:16px;z-index:99;display:flex;gap:8px">';
-  html+='<button onclick="window.print()" style="background:#002147;color:#fff;border:none;border-radius:6px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">&#128424; Print / Save PDF</button>';
-  html+='<button onclick="window.close()" style="background:#eee;color:#333;border:none;border-radius:6px;padding:10px 16px;font-size:13px;cursor:pointer">Close</button>';
-  html+='</div>';
-
-  // ── Page 1: Cover
-  html+='<div class="cover">';
-  html+='<div class="cover-logo">'+(logoSrc?'<img src="'+logoSrc+'" style="height:48px"/>':'<strong style="color:#002147;font-size:16pt">Lane Property Tax Advocates</strong>')+'</div>';
-  html+='<div class="cover-bar">';
-  html+='<h1>'+esc(cl.name)+'</h1>';
-  html+='<p>'+f.year+' Property Tax Report &nbsp;&bull;&nbsp; Prepared by Lane Property Tax Advocates &nbsp;&bull;&nbsp; '+today+'</p>';
-  html+='</div>';
-
-  if(totalSavings>0){
-    html+='<div class="savings-banner">';
-    html+='<div class="lbl">'+f.year+' Total Tax Savings</div>';
-    html+='<div class="val">'+fmtMV(totalSavings)+'</div>';
-    html+='</div>';
-  }
-
-  html+='<div class="kpi-strip">';
-  html+='<div class="kpi-card"><div class="kv">'+rows.length+'</div><div class="kl">Total Accounts</div></div>';
-  html+='<div class="kpi-card"><div class="kv" style="color:#155724">'+reducedCount+'</div><div class="kl">Accounts Reduced</div></div>';
-  html+='<div class="kpi-card"><div class="kv" style="color:'+(pendingCount>0?'#856404':'#888')+'">'+pendingCount+'</div><div class="kl">Cases Pending</div></div>';
-  html+='</div>';
-
-  if(totalReduced>0){
-    html+='<div style="border:1px solid #ddd;border-radius:6px;padding:14px 18px;margin-bottom:12px">';
-    html+='<div style="font-size:9pt;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Total Portfolio Value Reduced</div>';
-    html+='<div style="font-size:18pt;font-weight:700;color:#155724">'+fmtMV(totalReduced)+'</div>';
-    html+='</div>';
-  }
-
-  // ── Page 2: Account Results
-  html+='<div class="page-break"></div>';
-  html+='<div class="section-hdr">'+f.year+' Account Results</div>';
-  html+='<table class="rpt-table"><thead><tr>';
-  html+='<th>#</th><th>Address</th><th>CAD</th><th>Owner</th>';
-  html+='<th class="r">'+esc(L.prior)+'</th>';
-  html+='<th class="r">Final Appraised Value</th>';
-  html+='<th class="r">$ Reduced</th>';
-  html+='<th class="r">Tax Savings</th>';
-  html+='<th>Status</th>';
-  html+='</tr></thead><tbody>';
-
-  var sortedR=rows.slice().sort(function(a,b){
-    var an=parseMV(a.priorVal)||0,bn=parseMV(b.priorVal)||0;return bn-an;
-  });
-  var totPrior=0,totFinal=0,totRed=0,totSav=0;
-  for(var ri=0;ri<sortedR.length;ri++){
-    var r=sortedR[ri];
-    var prior=parseMV(r.priorVal)||0;
-    var final=parseMV(r.finalAppr);
-    var red=prior&&final!==null&&final<prior?prior-final:0;
-    var sav=parseMV(r.taxSavings)||0;
-    var isPending=r.status==='Active Litigation'||r.status==='Arbitration'||r.status==='Awaiting Formal';
-    var rowCls=r.status==='Active Litigation'?'lit':r.status==='Arbitration'?'arb':r.status==='Awaiting Formal'?'formal':red>0?'red-row':'';
-    totPrior+=prior;
-    if(final!==null)totFinal+=final;
-    totRed+=red;totSav+=sav;
-    html+='<tr class="'+rowCls+'">';
-    html+='<td style="color:#aaa;font-size:8pt">'+(ri+1)+'</td>';
-    html+='<td>'+esc(r.address||'—')+'</td>';
-    html+='<td>'+esc(r.cad||'')+'</td>';
-    html+='<td style="font-size:8.5pt">'+esc(r.owner||'')+'</td>';
-    html+='<td class="r">'+(prior?fmtMV(prior):'—')+'</td>';
-    html+='<td class="r">'+(isPending?'<span class="pending-badge">Pending</span>':final!==null?fmtMV(final):'—')+'</td>';
-    html+='<td class="r">'+(red>0?'<span class="red-badge">'+fmtMV(red)+'</span>':'—')+'</td>';
-    html+='<td class="r">'+(sav>0?'<strong style="color:#155724">'+fmtMV(sav)+'</strong>':'—')+'</td>';
-    html+='<td style="font-size:8.5pt">'+esc(r.status||'')+'</td>';
-    html+='</tr>';
-  }
-  html+='</tbody><tfoot><tr>';
-  html+='<td colspan="4">TOTALS</td>';
-  html+='<td class="r">'+(totPrior?fmtMV(totPrior):'')+'</td>';
-  html+='<td class="r">'+(totFinal?fmtMV(totFinal):'')+'</td>';
-  html+='<td class="r">'+(totRed?fmtMV(totRed):'')+'</td>';
-  html+='<td class="r">'+(totSav?fmtMV(totSav):'')+'</td>';
-  html+='<td></td></tr></tfoot></table>';
-
-  // ── Page 3: County Breakdown
-  var detectedCads=rows.reduce(function(acc,r){if(r.cad&&acc.indexOf(r.cad)<0)acc.push(r.cad);return acc;},[]).sort();
-  if(detectedCads.length>1){
-    html+='<div class="page-break"></div>';
-    html+='<div class="section-hdr">County Breakdown</div>';
-    html+='<table class="rpt-table"><thead><tr>';
-    html+='<th>County / CAD</th><th class="r">Accounts</th><th class="r">% of Portfolio</th>';
-    html+='<th class="r">'+esc(L.prior)+'</th><th class="r">Final Appraised Value</th>';
-    html+='<th class="r">Total Reduced</th><th class="r">Tax Savings</th>';
-    html+='</tr></thead><tbody>';
-    for(var ci=0;ci<detectedCads.length;ci++){
-      var co=detectedCads[ci];
-      var cr=rows.filter(function(r){return r.cad===co;});
-      var cPrior=totMV(cr,'priorVal'),cFinal=totMV(cr,'finalAppr');
-      var cRed=cr.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
-      var cSav=totMV(cr,'taxSavings');
-      var bg=ci%2===0?'':'background:#f8f9fb;';
-      html+='<tr><td style="'+bg+'font-weight:600">'+esc(co)+'</td>';
-      html+='<td class="r" style="'+bg+'">'+cr.length+'</td>';
-      html+='<td class="r" style="'+bg+'">'+(cr.length/rows.length*100).toFixed(1)+'%</td>';
-      html+='<td class="r" style="'+bg+'">'+(cPrior?fmtMV(cPrior):'—')+'</td>';
-      html+='<td class="r" style="'+bg+'">'+(cFinal?fmtMV(cFinal):'—')+'</td>';
-      html+='<td class="r" style="'+bg+';color:'+(cRed>0?'#155724':'#222')+';font-weight:'+(cRed>0?'700':'400')+'">'+(cRed>0?fmtMV(cRed):'—')+'</td>';
-      html+='<td class="r" style="'+bg+';color:'+(cSav>0?'#155724':'#222')+';font-weight:'+(cSav>0?'700':'400')+'">'+(cSav>0?fmtMV(cSav):'—')+'</td>';
-      html+='</tr>';
-    }
-    html+='</tbody><tfoot><tr><td>TOTAL</td>';
-    html+='<td class="r">'+rows.length+'</td><td class="r">100%</td>';
-    html+='<td class="r">'+fmtMV(totMV(rows,'priorVal'))+'</td>';
-    html+='<td class="r">'+fmtMV(totMV(rows,'finalAppr'))+'</td>';
-    html+='<td class="r">'+(totRed?fmtMV(totRed):'—')+'</td>';
-    html+='<td class="r">'+(totSav?fmtMV(totSav):'—')+'</td>';
-    html+='</tr></tfoot></table>';
-  }
-
-  // Footer
-  html+='<div class="footer">Prepared by Lane Property Tax Advocates &nbsp;&bull;&nbsp; '+today+' &nbsp;&bull;&nbsp; Confidential — For '+esc(cl.name)+' Use Only</div>';
-  html+='</body></html>';
-
-  var w=window.open('','_blank');
-  if(w){w.document.write(html);w.document.close();}
-  else{alert('Please allow popups for this site to open the report.');}
-}
 
 function renderMain(){
   var el=document.getElementById('content');
@@ -2214,22 +2031,18 @@ function renderMain(){
     +'<span class="yr-badge">'+esc(f.year)+'</span>'
     +'<span style="font-size:12px;color:#888;margin-left:8px">'+esc(cl?cl.firm||'':'')+'</span></div>'
     +'<div style="display:flex;gap:6px">'
-    +(isClientSession()?
-      '<button class="btn btn-sm btn-navy" onclick="printClientReport()">&#128196; Download Report</button>'
-      :
-      '<button class="btn btn-sm btn-navy" onclick="exportExcel()">&#8595; Export Excel</button>'
-      +'<div class="pdf-drop" id="pdfDropWrap">'
-      +'<button class="btn btn-sm" style="background:#8e44ad;color:#fff" onclick="showPdfMenu()">&#128196; Export PDF &#9662;</button>'
-      +'<div class="pdf-menu" id="pdfMenu" style="display:none">'
-      +'<button onclick="exportPDF(\'year\')">&#128196; Current Year Summary</button>'
-      +'<div class="pdf-divider"></div>'
-      +'<button onclick="exportPDF(\'all\')">&#128196; All Years Summary</button>'
-      +'<div class="pdf-divider"></div>'
-      +'<button onclick="openDateRangeModal()">&#128197; Custom Date Range</button>'
-      +'</div></div>'
-      +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')">&#9881; Edit Folder</button>'
-      +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="editClientModal(\''+activeClientId+'\')">&#9881; Edit Client</button>'
-    )
+    +'<button class="btn btn-sm btn-navy" onclick="exportExcel()">&#8595; Export Excel</button>'
+    +'<div class="pdf-drop" id="pdfDropWrap">'
+    +'<button class="btn btn-sm" style="background:#8e44ad;color:#fff" onclick="showPdfMenu()">&#128196; Export PDF &#9662;</button>'
+    +'<div class="pdf-menu" id="pdfMenu" style="display:none">'
+    +'<button onclick="exportPDF(\'year\')">&#128196; Current Year Summary</button>'
+    +'<div class="pdf-divider"></div>'
+    +'<button onclick="exportPDF(\'all\')">&#128196; All Years Summary</button>'
+    +'<div class="pdf-divider"></div>'
+    +'<button onclick="openDateRangeModal()">&#128197; Custom Date Range</button>'
+    +'</div></div>'
+    +(canEdit()?'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')">&#9881; Edit Folder</button>':'')
+    +(canEdit()?'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="editClientModal(\''+activeClientId+'\')">&#9881; Edit Client</button>':'')
     +'</div></div>'
     +'<div class="tabs">'
     +'<button class="tab'+(activeTab==='ledger'?' active':'')+'" onclick="switchTab(\'ledger\')">Account Ledger</button>'
