@@ -114,7 +114,8 @@ tfoot td.tl{text-align:left}
 .legend{display:flex;gap:14px;margin-top:9px;flex-wrap:wrap;align-items:center}
 .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#555}
 .legend-dot{width:13px;height:13px;border-radius:3px;border-width:2px;border-style:solid;flex-shrink:0}
-.empty-state{text-align:center;padding:60px 20px;color:#888}
+#sortPanel{display:none}
+#sortPanel.open{display:block!important}
 .empty-state h2{font-size:18px;margin-bottom:8px;color:#aaa}
 .yr-badge{display:inline-block;background:var(--gold);color:#000;font-size:9px;font-weight:700;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle}
 /* ── Login Screen ── */
@@ -754,10 +755,22 @@ function undo(){
 
 // ── Sort ───────────────────────────────────────────────────────────────────────
 function sortBy(k){
-  if(sortKey===k){sortDir*=-1;}else{sortKey=k;sortDir=1;}
-  sortLevels=sortLevels.filter(function(s){return s.key!==k;});
-  sortLevels.unshift({key:k,dir:sortDir});
-  if(sortLevels.length>3)sortLevels=sortLevels.slice(0,3);
+  // Check if already in sortLevels
+  var existing=-1;
+  for(var i=0;i<sortLevels.length;i++){if(sortLevels[i].key===k){existing=i;break;}}
+  if(existing===0){
+    // Already primary — toggle direction
+    sortLevels[0].dir*=-1;
+    sortDir=sortLevels[0].dir;sortKey=k;
+  } else if(existing>0){
+    // Already secondary/tertiary — remove it
+    sortLevels.splice(existing,1);
+  } else {
+    // New — add as next level (default ascending)
+    if(sortLevels.length>=3)sortLevels.pop();
+    sortLevels.push({key:k,dir:1});
+    if(sortLevels.length===1){sortKey=k;sortDir=1;}
+  }
   renderTable();
 }
 function getValForSort(r,key){
@@ -890,12 +903,17 @@ function clearSbSearch(){
   if(inp)inp.value='';
   if(res){res.style.display='none';res.innerHTML='';}
 }
-// Close search results when clicking outside
+// Close search results and sort panel when clicking outside
 document.addEventListener('click',function(e){
   var wrap=document.querySelector('.sb-search-wrap');
   var results=document.getElementById('sbSearchResults');
   if(results&&wrap&&!wrap.contains(e.target)&&!results.contains(e.target)){
     results.style.display='none';
+  }
+  var sortPanel=document.getElementById('sortPanel');
+  if(sortPanel&&!e.target.closest('#sortPanel')&&!e.target.closest('[onclick*="sortPanel"]')){
+    sortPanel.classList.remove('open');
+    sortPanel.style.display='none';
   }
 });
 
@@ -2328,33 +2346,41 @@ function renderTab(){
       +'<div class="kpi"><div class="lbl">Total Value Reduced</div><div class="val" id="kpi_savings"></div></div>'
       +'<div class="kpi gold-border"><div class="lbl gold">Total Tax Savings</div><div class="val" id="kpi_taxsavings"></div></div>'
       +'</div>'
-      +'<div class="toolbar">'
+      +'<div class="toolbar" style="position:relative">'
       +'<input placeholder="Search address, owner, account..." value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderTable()"/>'
       +'<select onchange="filterCAD=this.value;renderTable()">'+cadOpts+'</select>'
       +'<select onchange="filterStatus=this.value;renderTable()">'+stOpts+'</select>'
-      +'<button onclick="viewMode=viewMode===\'full\'?\'basic\':\'full\';renderTable()" class="btn btn-sm" style="background:'+(viewMode==='full'?'var(--navy)':'#eee')+';color:'+(viewMode==='full'?'#fff':'#555')+';font-size:11px" title="Toggle expanded columns">&#8644; '+(viewMode==='full'?'Full View':'Expand')+' </button>'
+      +'<button onclick="document.getElementById(\'sortPanel\').classList.toggle(\'open\')" class="btn btn-sm" style="background:'+(sortLevels.length?'var(--navy)':'#eee')+';color:'+(sortLevels.length?'#fff':'#555')+';font-size:11px;position:relative" title="Multi-sort">&#9651; Sort'+(sortLevels.length?' ('+sortLevels.length+')':'')+'</button>'
+      +'<div id="sortPanel" style="display:none;position:absolute;top:38px;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12)">'
+      +'<div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Sort Order <span style="font-weight:400;text-transform:none">(up to 3 levels)</span></div>'
+      +(function(){
+        var FIELD_NAMES={cad:'CAD',account:'Account #',address:'Address',propName:'Property Name',owner:'Owner',priorVal:'Prior Value',prelim:'Prelim Market',prelimAppr:'Prelim Appr',finalAppr:'Final Appr',finalMkt:'Final Market',mktRed:'Mkt Reduction',pctChange:'% Change',taxSavings:'Tax Savings',status:'Status'};
+        var s='';
+        for(var si=0;si<sortLevels.length;si++){
+          var lv=sortLevels[si];var nm=FIELD_NAMES[lv.key]||lv.key;
+          var badge=si===0?'#002147':si===1?'#34495e':'#7f8c8d';
+          s+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;background:#f8f9fb;border-radius:6px;border-left:3px solid '+badge+'">';
+          s+='<span style="background:'+badge+';color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(si+1)+'</span>';
+          s+='<span style="flex:1;font-size:12px;font-weight:600;color:#333">'+nm+'</span>';
+          s+='<select onchange="sortLevels['+si+'].dir=parseInt(this.value);if('+si+'===0){sortDir=sortLevels[0].dir;sortKey=sortLevels[0].key;}renderTable()" style="border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-size:11px;background:#fff">';
+          s+='<option value="1"'+(lv.dir===1?' selected':'')+'>A → Z / Low → High</option>';
+          s+='<option value="-1"'+(lv.dir===-1?' selected':'')+'>Z → A / High → Low</option>';
+          s+='</select>';
+          s+='<button onclick="removeSortLevel('+si+')" style="background:none;border:1px solid #ddd;border-radius:4px;color:#999;cursor:pointer;font-size:13px;padding:2px 6px;line-height:1" title="Remove">×</button>';
+          s+='</div>';
+        }
+        if(sortLevels.length===0)s='<div style="color:#aaa;font-size:12px;padding:8px 0">Click any column header to add a sort level.</div>';
+        if(sortLevels.length>0)s+='<button onclick="sortLevels=[];sortKey=null;sortDir=1;renderTable()" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;margin-top:2px">Clear all sorts</button>';
+        return s;
+      })()
+      +'</div>'
+      +'</div>'
+      +'<button onclick="viewMode=viewMode===\'full\'?\'basic\':\'full\';renderTable()" class="btn btn-sm" style="background:'+(viewMode==='full'?'var(--navy)':'#eee')+';color:'+(viewMode==='full'?'#fff':'#555')+';font-size:11px" title="Toggle expanded columns">&#8644; '+(viewMode==='full'?'Full View':'Expand')+'</button>'
       +'<div style="margin-left:auto;display:flex;gap:6px">'
       +(canEdit()?'<button class="btn btn-sm" style="background:#6c757d;color:#fff" onclick="undo()" title="Undo last change">&#8630; Undo</button>':'')
       +'<button class="btn btn-navy btn-sm" onclick="openPasteModal()">&#128203; Paste from Excel</button>'
       +'<button class="btn btn-navy btn-sm" onclick="addRow()">+ Add Row</button>'
       +'</div></div>'
-      +(sortLevels.length>1?(function(){
-          var FIELD_NAMES={cad:'CAD',account:'Account #',address:'Address',propName:'Property Name',propType:'Property Type',impType:'Improvement Type',owner:'Owner',priorVal:'Prior Value',prelim:'Prelim Market',prelimAppr:'Prelim Appr',finalAppr:'Final Appr',finalMkt:'Final Market',mktRed:'Mkt Reduction',pctChange:'% Change',taxRate:'Tax Rate',taxSavings:'Tax Savings',status:'Status',notes:'Notes'};
-          var s='<div style="display:flex;align-items:center;gap:6px;padding:6px 0;flex-wrap:wrap"><span style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Sort:</span>';
-          for(var si=0;si<sortLevels.length;si++){
-            var lv=sortLevels[si];
-            var nm=FIELD_NAMES[lv.key]||lv.key;
-            var badge=(si===0?'#002147':(si===1?'#34495e':'#7f8c8d'));
-            s+='<div style="display:inline-flex;align-items:center;gap:4px;background:'+badge+';color:#fff;font-size:10px;font-weight:600;border-radius:4px;padding:3px 8px">';
-            s+='<span style="opacity:.6;font-size:9px">'+(si+1)+'.</span> '+nm;
-            s+='<button onclick="toggleSortLevelDir('+si+')" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;padding:0 2px" title="Toggle direction">'+(lv.dir===1?'↑':'↓')+'</button>';
-            s+='<button onclick="removeSortLevel('+si+')" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:12px;padding:0" title="Remove">×</button>';
-            s+='</div>';
-          }
-          s+='<button onclick="sortLevels=[];sortKey=null;sortDir=1;renderTable()" style="font-size:10px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline">Clear all</button>';
-          s+='</div>';
-          return s;
-        })():'')
       +'<div id="tableWrap"></div>'
       +'<div class="legend">'
       +'<div class="legend-item"><div class="legend-dot" style="background:#FFF3CD;border-color:#FFC107"></div>Active Litigation</div>'
