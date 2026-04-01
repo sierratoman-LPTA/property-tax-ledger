@@ -321,6 +321,10 @@ function updateLockUI(){
     btn.textContent='UNLOCK';btn.className='btn-lock locked';
     lbl.textContent='LOCKED';icon.textContent='🔒';
   }
+  // Re-render so inputs and delete buttons update
+  renderSidebar();
+  var f=getActiveFolder();
+  if(f){renderTable();renderKPIs();}
 }
 function checkLock(){
   if(!_unlocked){requireUnlock(function(){});return false;}
