@@ -282,7 +282,7 @@ tfoot td.tl{text-align:left}
       <p class="ver" id="homeHint" style="opacity:.35;font-size:9px">&#8962; Click logo to return home</p>
     </div>
     <div class="sb-tree" id="sbTree"></div>
-    <div class="sb-search-wrap" style="position:relative">
+    <div class="sb-search-wrap" style="position:relative;display:none" id="sbSearchWrap">
       <span class="sb-search-icon">&#128269;</span>
       <input class="sb-search-input" id="sbSearchInput" placeholder="Search clients or accounts..." oninput="onSbSearch(this.value)" autocomplete="off"/>
     </div>
@@ -597,8 +597,10 @@ function applySessionUI(){
   var isClient=isClientSession();
   var hint=document.getElementById('homeHint');
   var footer=document.getElementById('sbFooter');
+  var searchWrap=document.getElementById('sbSearchWrap');
   if(hint)hint.style.display=isClient?'none':'';
   if(footer)footer.style.display=isClient?'none':'';
+  if(searchWrap)searchWrap.style.display=isClient?'none':'';
   setTimeout(syncMobLogo,100);
 }
 function switchLoginTab(mode){
