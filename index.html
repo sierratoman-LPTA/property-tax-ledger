@@ -351,7 +351,33 @@ dbRef.on('value',function(snap){
   else{db=val;if(!db.clients)db.clients=[];}
   if(!_booted){
     _booted=true;
-    // Show login screen on first load
+    // Check for saved session
+    try{
+      var saved=sessionStorage.getItem('ptl_session');
+      if(saved){
+        var sess=JSON.parse(saved);
+        if(sess.type==='staff'){
+          _clientSession=null;_unlocked=true;
+          document.getElementById('loginScreen').style.display='none';
+          updateLockUI();applySessionUI();
+          renderSidebar();renderDashboard();
+          setTimeout(function(){setSyncDot('ok');},50);
+          return;
+        } else if(sess.type==='client'&&sess.id){
+          var matched=getClient(sess.id);
+          if(matched){
+            _clientSession=matched.id;_unlocked=false;
+            document.getElementById('loginScreen').style.display='none';
+            updateLockUI();applySessionUI();
+            activeClientId=matched.id;activeFolderId=null;
+            renderSidebar();renderMain();
+            setTimeout(function(){setSyncDot('ok');},50);
+            return;
+          }
+        }
+      }
+    }catch(e){}
+    // No valid session — show login
     initLoginScreen();
     setTimeout(function(){setSyncDot('ok');},50);
     return;
@@ -467,6 +493,7 @@ function submitLogin(){
   if(_loginMode==='staff'){
     if(val===_PASS){
       _clientSession=null;
+      sessionStorage.setItem('ptl_session',JSON.stringify({type:'staff'}));
       document.getElementById('loginScreen').style.display='none';
       _unlocked=true;updateLockUI();
       applySessionUI();
@@ -487,6 +514,7 @@ function submitLogin(){
     }
     if(matched){
       _clientSession=matched.id;
+      sessionStorage.setItem('ptl_session',JSON.stringify({type:'client',id:matched.id}));
       document.getElementById('loginScreen').style.display='none';
       _unlocked=false;updateLockUI();
       applySessionUI();
