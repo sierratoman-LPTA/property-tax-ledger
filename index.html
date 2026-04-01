@@ -2052,23 +2052,23 @@ function buildJsPDF(cl,folders,reportTitle){
   });
   y=Math.max(ctyY,doc.lastAutoTable.finalY)+14;
 
-  // Case Status Summary
-  if(y<pageH-100){
+  // Year-over-Year Savings Trend (replaces Case Status Summary)
+  if(folders.length>1&&y<pageH-100){
     doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(navy[0],navy[1],navy[2]);
-    doc.text('CASE STATUS SUMMARY',margin,y+11);y+=16;
-    var statuses=['Active Litigation','Arbitration','Awaiting Formal','Reduced Below Last Year'];
-    var stColors={'Active Litigation':[255,243,205],'Arbitration':[204,229,255],'Awaiting Formal':[234,213,245],'Reduced Below Last Year':[212,237,218]};
-    var stBody=statuses.map(function(s){
-      var sr=allRows.filter(function(r){return r.status===s;});
-      var sred=sr.reduce(function(a,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return a+(b&&fv&&fv<b?b-fv:0);},0);
-      return[s,String(sr.length),allRows.length?(sr.length/allRows.length*100).toFixed(1)+'%':'0%',sred>0?fmtMV(sred):'—',totMV(sr,'taxSavings')>0?fmtMV(totMV(sr,'taxSavings')):'—'];
+    doc.text('YEAR-OVER-YEAR SAVINGS TREND',margin,y+11);y+=16;
+    var yoyBody=folders.map(function(f){
+      var fr=f.rows||[];
+      var fSav=totMV(fr,'taxSavings');
+      var fRed=fr.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+      var fReducedCt=fr.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+      var fLitCt=fr.filter(function(r){return r.status==='Active Litigation';}).length;
+      return[f.year,String(fr.length),String(fReducedCt),String(fLitCt),fRed>0?fmtMV(fRed):'—',fSav>0?fmtMV(fSav):'—'];
     });
-    doc.autoTable({startY:y,head:[['Status','Accounts','% of Portfolio','Value Reduced','Tax Savings']],body:stBody,
+    doc.autoTable({startY:y,head:[['Tax Year','Accounts','Accts Reduced','Litigation','Total Value Reduced','Tax Savings']],body:yoyBody,
       margin:{left:margin,right:margin},
       headStyles:{fillColor:navy,textColor:white,fontSize:7,fontStyle:'bold'},
-      bodyStyles:{fontSize:8},
-      didParseCell:function(d){if(d.section==='body'){var col=stColors[d.cell.raw];if(col)d.cell.styles.fillColor=col;}},
-      columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right',textColor:green,fontStyle:'bold'}},
+      bodyStyles:{fontSize:8},alternateRowStyles:{fillColor:[248,249,251]},
+      columnStyles:{1:{halign:'right'},2:{halign:'right',textColor:green},3:{halign:'right'},4:{halign:'right',textColor:green},5:{halign:'right',textColor:green,fontStyle:'bold'}},
     });
     y=doc.lastAutoTable.finalY+14;
   }
