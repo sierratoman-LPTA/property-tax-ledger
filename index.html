@@ -788,26 +788,19 @@ function exportExcel(){
     L.prior,L.prelim,L.prelimAppr||'Prelim Appr Value',L.finalAppr,L.finalMkt,
     'Market Reduction *','% Change *','Tax Rate','Tax Savings *','Status','Notes'];
 
-  // Legend colors for the color coordinator row
-  var legendItems=[
-    {label:'Active Litigation',bg:'#FFF3CD',border:'#FFC107'},
-    {label:'Arbitration',bg:'#CCE5FF',border:'#004085'},
-    {label:'Reduced Below Last Year',bg:'#D4EDDA',border:'#28A745'},
-    {label:'Awaiting Formal',bg:'#EAD5F5',border:'#9B59B6'},
-    {label:'Completed',bg:'#F8F9FA',border:'#adb5bd'},
-  ];
-
   var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
   html+='<head><meta charset="UTF-8"><style>td,th{font-family:Arial;font-size:9pt;}</style>';
   html+='<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>'+f.year+' Ledger</x:Name><x:WorksheetOptions><x:FreezePanes/><x:FrozenNoSplit/><x:SplitHorizontal>2</x:SplitHorizontal><x:TopRowBottomPane>2</x:TopRowBottomPane><x:ActivePane>2</x:ActivePane></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->';
   html+='</head><body><table>';
 
-  // Row 1: Color legend coordinator (frozen with headers)
-  html+='<tr style="height:22px;">';
-  for(var li=0;li<legendItems.length;li++){
-    var leg=legendItems[li];
-    html+='<td colspan="'+(li===0?2:li===legendItems.length-1?NC-2-3*(legendItems.length-2):3)+'" style="background:'+leg.bg+';border:2px solid '+leg.border+';font-size:9px;font-weight:bold;color:#333;text-align:center;padding:3px 4px;white-space:nowrap;">'+leg.label+'</td>';
-  }
+  // Row 1: Professional color legend coordinator (frozen with headers)
+  html+='<tr style="height:20px;">';
+  html+='<td colspan="3" style="background:#002147;color:#C9A84C;font-size:8pt;font-weight:bold;padding:4px 8px;letter-spacing:.5px;">ROW COLOR KEY</td>';
+  html+='<td colspan="2" style="background:#FFF3CD;border:1.5px solid #FFC107;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#9632; Active Litigation</td>';
+  html+='<td colspan="2" style="background:#CCE5FF;border:1.5px solid #004085;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#9632; Arbitration</td>';
+  html+='<td colspan="3" style="background:#D4EDDA;border:1.5px solid #28A745;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#9632; Reduced Below Last Year</td>';
+  html+='<td colspan="3" style="background:#EAD5F5;border:1.5px solid #9B59B6;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#9632; Awaiting Formal</td>';
+  html+='<td colspan="3" style="background:#F8F9FA;border:1.5px solid #adb5bd;font-size:8pt;font-weight:600;color:#333;text-align:center;padding:3px 6px;">&#10003; Completed</td>';
   html+='</tr>';
 
   // Row 2: Column header row (frozen)
@@ -823,7 +816,7 @@ function exportExcel(){
     var pv=parseFloat(r.pctChange)||0;
     var pctColor=pv<0?'#155724':pv>0?'#721c24':'#444';
     var redAmt=parseMV(r.mktRed)||0;var savAmt=parseMV(r.taxSavings)||0;
-    var displayStatus=r.status==='Completed'?'':r.status;
+    var displayStatus=r.status==='Completed'?'&#10003; Done':r.status==='None'?'':r.status;
     html+='<tr>';
     html+='<td style="background:'+bg+';color:#888;font-size:9pt;text-align:center;padding:5px 6px;border:1px solid #eee;">'+(ri+1)+'</td>';
     html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.cad||'')+'</td>';
@@ -901,7 +894,7 @@ function buildExecSummaryHtml(cl, folders){
 
   var h='<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>'+cl.name+' Executive Summary</title><style>';
   h+='*{box-sizing:border-box;margin:0;padding:0}';
-  h+='body{font-family:"Arial",sans-serif;font-size:11px;color:#1a1a1a;background:#fff}';
+  h+='body{font-family:"Arial",sans-serif;font-size:11px;color:#1a1a1a;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
   h+='.page{max-width:900px;margin:0 auto;padding:32px}';
   // Header
   h+='.firm-bar{background:#002147;color:rgba(255,255,255,0.5);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;padding:8px 20px;text-align:right}';
