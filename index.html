@@ -11,7 +11,7 @@
 body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222}
 :root{--navy:#002147;--gold:#C9A84C}
 #app{display:flex;height:100vh;overflow:hidden}
-#sidebar{width:230px;min-width:230px;background:var(--navy);color:#fff;display:flex;flex-direction:column;overflow:hidden}
+#sidebar{width:230px;min-width:230px;background:var(--navy);color:#fff;display:flex;flex-direction:column;overflow:hidden;height:100vh}
 #main{flex:1;overflow:auto;padding:18px}
 .sb-header{padding:16px 14px 10px;border-bottom:1px solid rgba(255,255,255,0.12)}
 .sb-header h2{font-size:14px;font-weight:700;letter-spacing:.5px}
@@ -110,7 +110,6 @@ tfoot td.tl{text-align:left}
 .btn-lock{border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.3px}
 .btn-lock.locked{background:#dc3545;color:#fff;}
 .btn-lock.unlocked{background:#28a745;color:#fff;}
-.locked-overlay{pointer-events:none;opacity:0.45}
 </style>
 </head>
 <body>
@@ -414,7 +413,7 @@ function renderSidebar(){
     html+='<div class="sb-client'+(activeFolderId===null&&activeClientId===c.id?' active':'')+'" onclick="toggleClient(\''+c.id+'\')">'
       +'<button class="sb-toggle" onclick="event.stopPropagation();toggleExpand(\''+c.id+'\')">'+(exp?'&#9660;':'&#9654;')+'</button>'
       +'<span class="cname">'+esc(c.name)+'</span>'
-      +'<button class="sb-del" onclick="event.stopPropagation();delClient(\''+c.id+'\')" title="Delete">&#215;</button></div>';
+      +(_unlocked?'<button class="sb-del" onclick="event.stopPropagation();delClient(\''+c.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
     if(exp&&c.folders){
       for(var j=0;j<c.folders.length;j++){
         var f=c.folders[j];var isA=activeClientId===c.id&&activeFolderId===f.id;
@@ -422,7 +421,7 @@ function renderSidebar(){
           +'<span style="font-size:10px;opacity:.6">&#128193;</span>'
           +'<span class="fname">'+esc(f.year)+'</span>'
           +'<span style="font-size:9px;opacity:.4;margin-left:2px">'+(f.rows?f.rows.length:0)+'</span>'
-          +'<button class="sb-del" onclick="event.stopPropagation();delFolder(\''+c.id+'\',\''+f.id+'\')" title="Delete">&#215;</button></div>';
+          +(_unlocked?'<button class="sb-del" onclick="event.stopPropagation();delFolder(\''+c.id+'\',\''+f.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
       }
       html+='<div class="sb-add-folder" onclick="requireUnlock(function(){openNewFolderModal(\''+c.id+'\')})">&#43; add year / folder</div>';
     }
@@ -536,7 +535,20 @@ function removeRow(id){
   saveDB();renderTable();renderKPIs();
 }
 function updateField(id,field,val){
-  var f=getActiveFolder();if(!f)return;if(!checkLock())return;
+  var f=getActiveFolder();if(!f)return;
+  if(!_unlocked){
+    // revert the input to its current saved value
+    var r2=(f.rows||[]).filter(function(x){return x.id===id;})[0];
+    if(r2){
+      var inp=document.querySelector('tr[data-id="'+id+'"] input[onchange*="\''+field+'\'"], tr[data-id="'+id+'"] select[onchange*="\''+field+'\'"]');
+      if(inp){
+        var savedVal=r2[field]||'';
+        if(field==='priorVal'||field==='prelim'||field==='prelimAppr'||field==='finalAppr'||field==='finalMkt')savedVal=fmtMV(savedVal)||'';
+        inp.value=savedVal;
+      }
+    }
+    requireUnlock(function(){});return;
+  }
   var r=(f.rows||[]).filter(function(x){return x.id===id;})[0];if(!r)return;
   pushUndo();r[field]=val;recalcRow(r);saveDB();renderKPIs();
   var tr=document.querySelector('tr[data-id="'+id+'"]');
@@ -974,16 +986,16 @@ function renderTable(){
     for(var fi=0;fi<vf.length;fi++){
       var fld=vf[fi];
       if(fld.k==='_rownum'){tbody+='<td class="num-cell">'+(ri+1)+'</td>';}
-      else if(fld.k==='cad'){var opts='';for(var ci=0;ci<COUNTIES.length;ci++)opts+='<option'+(r.cad===COUNTIES[ci]?' selected':'')+'>'+COUNTIES[ci]+'</option>';tbody+='<td style="min-width:'+fld.w+'px"><select onchange="updateField(\''+r.id+'\',\'cad\',this.value)">'+opts+'</select></td>';}
-      else if(fld.k==='status'){var sopts='';for(var si=0;si<STATUS.length;si++)sopts+='<option'+(r.status===STATUS[si]?' selected':'')+'>'+STATUS[si]+'</option>';tbody+='<td style="min-width:'+fld.w+'px"><select onchange="updateField(\''+r.id+'\',\'status\',this.value)">'+sopts+'</select></td>';}
+      else if(fld.k==='cad'){var opts='';for(var ci=0;ci<COUNTIES.length;ci++)opts+='<option'+(r.cad===COUNTIES[ci]?' selected':'')+'>'+COUNTIES[ci]+'</option>';tbody+='<td style="min-width:'+fld.w+'px"><select'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'cad\',this.value)">'+opts+'</select></td>';}
+      else if(fld.k==='status'){var sopts='';for(var si=0;si<STATUS.length;si++)sopts+='<option'+(r.status===STATUS[si]?' selected':'')+'>'+STATUS[si]+'</option>';tbody+='<td style="min-width:'+fld.w+'px"><select'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'status\',this.value)">'+sopts+'</select></td>';}
       else if(fld.k==='pctChange'){tbody+='<td class="pct-cell calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:'+pctColor+'">'+esc(r.pctChange||'')+'</td>';}
       else if(fld.k==='mktRed'){tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.mktRed)||'')+'</td>';}
       else if(fld.k==='taxSavings'){tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.taxSavings)||'')+'</td>';}
-      else if(fld.k==='finalAppr'){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r.finalAppr))+'" onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/><span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';}
-      else if(fld.mv){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r[fld.k]))+'" onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';}
-      else{tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'" onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';}
+      else if(fld.k==='finalAppr'){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r.finalAppr))+'"'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/><span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';}
+      else if(fld.mv){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r[fld.k]))+'"'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';}
+      else{tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'"'+(_unlocked?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';}
     }
-    tbody+='<td><button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button></td>';
+    tbody+='<td>'+(_unlocked?'<button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button>':'')+'</td>';
     tbody+='</tr>';
   }
   tbody+='</tbody>';
@@ -996,7 +1008,7 @@ function renderTable(){
     else tfoot+='<td></td>';
   }
   tfoot+='<td></td></tr></tfoot>';
-  document.getElementById('tableWrap').innerHTML='<div class="tbl-wrap'+((!_unlocked)?' locked-overlay':'')+'"><table>'+thead+tbody+tfoot+'</table></div>';
+  document.getElementById('tableWrap').innerHTML='<div class="tbl-wrap"><table>'+thead+tbody+tfoot+'</table></div>';
 }
 
 // ── Summary ────────────────────────────────────────────────────────────────────
