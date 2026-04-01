@@ -360,6 +360,7 @@ tfoot td.tl{text-align:left}
     </div>
     <div class="modal-btns">
       <button class="btn" style="background:#eee;color:#333" onclick="document.getElementById('clientModal').style.display='none'">Cancel</button>
+      <button class="btn" id="cmDeleteBtn" style="background:#fff;color:#dc3545;border:1px solid #dc3545;display:none" onclick="document.getElementById('clientModal').style.display='none';delClient(editingClientId)">&#128465; Delete Client</button>
       <button class="btn btn-navy" onclick="saveClient()">Save Client</button>
     </div>
   </div>
@@ -379,6 +380,7 @@ tfoot td.tl{text-align:left}
     </div>
     <div class="modal-btns">
       <button class="btn" style="background:#eee;color:#333" onclick="document.getElementById('folderModal').style.display='none'">Cancel</button>
+      <button class="btn" id="fmDeleteBtn" style="background:#fff;color:#dc3545;border:1px solid #dc3545;display:none" onclick="document.getElementById('folderModal').style.display='none';delFolder(editingClientId,editingFolderId)">&#128465; Delete Year</button>
       <button class="btn btn-navy" onclick="saveFolder()">Save Folder</button>
     </div>
   </div>
@@ -751,7 +753,7 @@ function defaultLabels(year){
 function emptyRow(){
   return{id:uid(),cad:'Harris',account:'',address:'',propName:'',propType:'',impType:'',
     owner:'',priorVal:'',prelim:'',prelimAppr:'',finalAppr:'',finalMkt:'',
-    mktRed:'',pctChange:'',taxRate:'',taxSavings:'',status:'',hearingDate:'',arbDate:'',notes:''};
+    mktRed:'',pctChange:'',taxRate:'',taxSavings:'',status:'',notes:''};
 }
 
 function recalcRow(r){
@@ -856,7 +858,7 @@ function removeSortLevel(idx){
 function renderSortPanel(){
   var sp=document.getElementById('sortPanel');
   if(!sp)return;
-  var FIELD_NAMES={cad:'CAD',account:'Account #',address:'Address',propName:'Property Name',owner:'Owner',priorVal:'Prior Value',prelim:'Prelim Market',prelimAppr:'Prelim Appr',finalAppr:'Final Appr',finalMkt:'Final Market',mktRed:'Mkt Reduction',pctChange:'% Change',taxSavings:'Tax Savings',status:'Status',hearingDate:'Hearing Date',arbDate:'Arb Date'};
+  var FIELD_NAMES={cad:'CAD',account:'Account #',address:'Address',propName:'Property Name',owner:'Owner',priorVal:'Prior Value',prelim:'Prelim Market',prelimAppr:'Prelim Appr',finalAppr:'Final Appr',finalMkt:'Final Market',mktRed:'Mkt Reduction',pctChange:'% Change',taxSavings:'Tax Savings',status:'Status'};
   var MV_FIELDS=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed','taxSavings','pctChange'];
   var inner='<div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Sort Order <span style="font-weight:400;text-transform:none">(up to 3 levels)</span></div>';
   if(sortLevels.length===0){
@@ -1015,19 +1017,20 @@ function renderSidebar(){
   if(!clients2.length){el.innerHTML='<div style="padding:16px 14px;font-size:11px;opacity:.5">No clients yet.<br>Click + New Client.</div>';return;}
   var html='';
   for(var i=0;i<clients2.length;i++){
-    var c=clients2[i];var exp=c.expanded!==false;
+    var c=clients2[i];
+    // Default collapsed — only expand if explicitly set or is active client
+    var exp=c.expanded===true||(activeClientId===c.id);
     html+='<div class="sb-client'+(activeFolderId===null&&activeClientId===c.id?' active':'')+'" onclick="toggleClient(\''+c.id+'\')">'
       +'<button class="sb-toggle" onclick="event.stopPropagation();toggleExpand(\''+c.id+'\')">'+(exp?'&#9660;':'&#9654;')+'</button>'
       +'<span class="cname">'+esc(c.name)+'</span>'
-      +(canEdit()?'<button class="sb-del" onclick="event.stopPropagation();delClient(\''+c.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
+      +'</div>';
     if(exp&&c.folders){
       for(var j=0;j<c.folders.length;j++){
         var f=c.folders[j];var isA=activeClientId===c.id&&activeFolderId===f.id;
         html+='<div class="sb-folder'+(isA?' active':'')+'" onclick="selectFolder(\''+c.id+'\',\''+f.id+'\')">'
           +'<span style="font-size:10px;opacity:.6">&#128193;</span>'
           +'<span class="fname">'+esc(f.year)+'</span>'
-          +'<span style="font-size:9px;opacity:.4;margin-left:2px">'+(f.rows?f.rows.length:0)+'</span>'
-          +(canEdit()?'<button class="sb-del" onclick="event.stopPropagation();delFolder(\''+c.id+'\',\''+f.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
+          +'</div>';
       }
       html+='<div class="sb-add-folder" onclick="openNewFolderModal(\''+c.id+'\')">&#43; add year / folder</div>';
     }
@@ -1035,7 +1038,13 @@ function renderSidebar(){
   el.innerHTML=html;
 }
 
-function toggleExpand(cid){var c=getClient(cid);if(!c)return;c.expanded=c.expanded===false?true:false;saveDB();renderSidebar();}
+function toggleExpand(cid){
+  var c=getClient(cid);if(!c)return;
+  // Current state: expanded if c.expanded===true OR is active client
+  var currExp=c.expanded===true||(activeClientId===cid);
+  c.expanded=!currExp;
+  saveDB();renderSidebar();
+}
 function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;sortLevels=[];renderSidebar();renderMain();var cl=getClient(cid);if(cl)updateMobTitle(cl.name);}
 function selectFolder(cid,fid){
   if(isClientSession()){
@@ -1115,6 +1124,7 @@ function openNewClientModal(){
   document.getElementById('cm_name').value='';
   document.getElementById('cm_firm').value='Lane Property Tax Advocates';
   document.getElementById('cm_code').value='';
+  document.getElementById('cmDeleteBtn').style.display='none';
   document.getElementById('clientModal').style.display='flex';
   setTimeout(function(){document.getElementById('cm_name').focus();},100);
 }
@@ -1145,8 +1155,9 @@ function editClientModal(cid){
   document.getElementById('cmTitle').textContent='Edit Client';
   document.getElementById('cm_name').value=c.name||'';
   document.getElementById('cm_firm').value=c.firm||'';
-  document.getElementById('cm_code').value=''; // never show hash, let them re-enter to change
+  document.getElementById('cm_code').value='';
   document.getElementById('cm_code').placeholder=c.clientCodeHint?'Current: '+c.clientCodeHint+' (leave blank to keep)':'e.g. SILV2025';
+  document.getElementById('cmDeleteBtn').style.display='inline-block';
   document.getElementById('clientModal').style.display='flex';
 }
 function delClient(cid){
@@ -1171,6 +1182,7 @@ function openNewFolderModal(cid){
   document.getElementById('fm_prelimAppr').value=lbl.prelimAppr;
   document.getElementById('fm_finalAppr').value=lbl.finalAppr;
   document.getElementById('fm_finalMkt').value=lbl.finalMkt;
+  document.getElementById('fmDeleteBtn').style.display='none';
   document.getElementById('folderModal').style.display='flex';
   setTimeout(function(){document.getElementById('fm_year').focus();},100);
 }
@@ -1202,6 +1214,7 @@ function editFolderModal(cid,fid){
   document.getElementById('fm_prelimAppr').value=f.labels.prelimAppr||'';
   document.getElementById('fm_finalAppr').value=f.labels.finalAppr||'';
   document.getElementById('fm_finalMkt').value=f.labels.finalMkt||'';
+  document.getElementById('fmDeleteBtn').style.display='inline-block';
   document.getElementById('folderModal').style.display='flex';
 }
 function delFolder(cid,fid){
@@ -1228,7 +1241,7 @@ var FIELD_LABELS={
   propType:'Property Type',impType:'Improvement Type',owner:'Owner',
   priorVal:'Prior Year Value',prelim:'Prelim Market Value',prelimAppr:'Prelim Appr Value',
   finalAppr:'Final Appr Value',finalMkt:'Final Market Value',
-  taxRate:'Tax Rate',status:'Status',hearingDate:'Formal Hearing Date',arbDate:'Arbitration Date',notes:'Notes'
+  taxRate:'Tax Rate',status:'Status',notes:'Notes'
 };
 function getActorName(){
   if(_sessionType==='creator')return 'Sierra Miller';
@@ -1313,7 +1326,6 @@ var PFIELDS=[
   {k:'prelim',label:'Prelim Market Value'},{k:'prelimAppr',label:'Prelim Appr Value'},
   {k:'finalAppr',label:'Final Appr Value'},{k:'finalMkt',label:'Final Market Value'},
   {k:'taxRate',label:'Tax Rate'},{k:'status',label:'Status'},
-  {k:'hearingDate',label:'Formal Hearing Date'},{k:'arbDate',label:'Arbitration Date'},
   {k:'notes',label:'Notes'},
 ];
 var AMAP={
@@ -1329,8 +1341,6 @@ var AMAP={
   finalMkt:['finalmkt','finalmarket','finalmarketvalue','finalmktval'],
   taxRate:['taxrate','rate','taxratepct'],
   status:['status','casestatus'],
-  hearingDate:['hearingdate','formaldate','formalhearing','hearingdt'],
-  arbDate:['arbdate','arbitrationdate','arbhearing','arbdt'],
   notes:['notes','note','comments']
 };
 function autoMatch(h,key){
@@ -2078,7 +2088,7 @@ function buildJsPDF(cl,folders,reportTitle){
     if(rows.length===0)continue;
     doc.addPage();addPageHeader(cl.name+' — '+f.year+' Account Ledger');
     var STATUS_COLORS={'Active Litigation':[255,243,205],'Arbitration':[204,229,255],'Reduced Below Last Year':[212,237,218],'Awaiting Formal':[234,213,245]};
-    var lhead=[['#','CAD','Account #','Address','Owner','Prior Value','Prelim Value','Final Appr','Final Mkt','Reduction','% Chg','Savings','Status','Hearing Dt','Arb Dt']];
+    var lhead=[['#','CAD','Account #','Address','Owner','Prior Value','Prelim Value','Final Appr','Final Mkt','Reduction','% Chg','Savings','Status']];
     var lbody=rows.map(function(r,i){return[
       String(i+1),r.cad||'',r.account||'',
       (r.address||'').substring(0,26),(r.owner||'').substring(0,20),
@@ -2087,7 +2097,6 @@ function buildJsPDF(cl,folders,reportTitle){
       parseMV(r.mktRed)>0?fmtMV(r.mktRed):'',r.pctChange||'',
       parseMV(r.taxSavings)>0?fmtMV(r.taxSavings):'',
       (r.status===''||r.status==='None')?'':r.status,
-      r.hearingDate||'',r.arbDate||''
     ];});
     doc.autoTable({startY:50,head:lhead,body:lbody,margin:{left:margin,right:margin},
       headStyles:{fillColor:navy,textColor:white,fontSize:6.5,fontStyle:'bold'},
@@ -2095,7 +2104,7 @@ function buildJsPDF(cl,folders,reportTitle){
       columnStyles:{0:{cellWidth:14,halign:'center'},1:{cellWidth:32},2:{cellWidth:48},3:{cellWidth:70},4:{cellWidth:60},
         5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'},
         9:{halign:'right',textColor:green,fontStyle:'bold'},10:{halign:'right'},
-        11:{halign:'right',textColor:green,fontStyle:'bold'},12:{cellWidth:48},13:{cellWidth:44},14:{cellWidth:44}},
+        11:{halign:'right',textColor:green,fontStyle:'bold'},12:{cellWidth:48}},
       didParseCell:function(d){if(d.section==='body'){var st=rows[d.row.index]?rows[d.row.index].status:'';var col=STATUS_COLORS[st];if(col)d.cell.styles.fillColor=col;}},
       didDrawPage:function(){addPageHeader(cl.name+' — '+f.year+' Account Ledger');}
     });
@@ -2187,8 +2196,6 @@ function getFields(labels){
     {k:'taxRate',label:'Tax Rate',w:90,mv:false,full:true},
     {k:'taxSavings',label:'Tax Savings *',w:120,mv:true,calc:true},
     {k:'status',label:'Status',w:155,mv:false},
-    {k:'hearingDate',label:'Formal Hearing Date',w:120,mv:false},
-    {k:'arbDate',label:'Arbitration Date',w:120,mv:false},
     {k:'notes',label:'Notes',w:130,mv:false},
   ];
   return viewMode==='full'?base:base.filter(function(f){return !f.full;});
@@ -2237,14 +2244,6 @@ function renderTable(){
       else if(fld.k==='taxSavings'){tbody+='<td class="calc-cell" style="min-width:'+fld.w+'px;text-align:right;font-weight:600;color:#155724">'+esc(fmtMV(r.taxSavings)||'')+'</td>';}
       else if(fld.k==='finalAppr'){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r.finalAppr))+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\'finalAppr\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/><span class="arrow-cell">'+(isRed?'<span class="arrow-dn">&#8595;</span>':'')+'</span></td>';}
       else if(fld.mv){tbody+='<td style="min-width:'+fld.w+'px;text-align:right"><input value="'+esc(fmtMV(r[fld.k]))+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value.replace(/[$,]/g,\'\'))" onfocus="this.value=this.value.replace(/[$,]/g,\'\')" onblur="if(this.value)this.value=fmtMV(this.value)" style="text-align:right"/></td>';}
-      else if(fld.k==='hearingDate'||fld.k==='arbDate'){
-        var dval=r[fld.k]||'';
-        var dDisplay=dval?new Date(dval+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
-        var isPast=dval&&new Date(dval)<new Date();
-        var isUpcoming=dval&&!isPast&&(new Date(dval)-new Date())<7*24*60*60*1000;
-        var dcolor=isPast?'#dc3545':isUpcoming?'#856404':'#222';
-        tbody+='<td style="min-width:'+fld.w+'px"><input type="date" value="'+esc(dval)+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)" style="font-size:11px;color:'+dcolor+';font-weight:'+(dval?'600':'400')+'" title="'+(isPast?'Past date':isUpcoming?'Coming up soon':'')+'" /></td>';
-      }
       else{tbody+='<td style="min-width:'+fld.w+'px"><input value="'+esc(r[fld.k]||'')+'"'+(canEdit()?'':' disabled')+' onchange="updateField(\''+r.id+'\',\''+fld.k+'\',this.value)"/></td>';}
     }
     tbody+='<td>'+(canEdit()?'<button onclick="removeRow(\''+r.id+'\')" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:14px;padding:0 3px">&#215;</button>':'')+'</td>';
