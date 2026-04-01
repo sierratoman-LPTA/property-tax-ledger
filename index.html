@@ -535,6 +535,7 @@ var db={clients:[]};
 var activeClientId=null,activeFolderId=null;
 var activeTab='ledger',filterCAD='All',filterStatus='All',searchQ='',viewMode='basic';
 var sortKey=null,sortDir=1;
+var sortLevels=[];
 var editingClientId=null,editingFolderId=null;
 var pasteRows=[],pasteHdrs=[];
 var fileRows=[],fileHdrs=[],importFileName='';
@@ -752,18 +753,44 @@ function undo(){
 }
 
 // ── Sort ───────────────────────────────────────────────────────────────────────
-function sortBy(k){if(sortKey===k){sortDir*=-1;}else{sortKey=k;sortDir=1;}renderTable();}
-function sortedRows(rows){
-  if(!sortKey)return rows;
+function sortBy(k){
+  if(sortKey===k){sortDir*=-1;}else{sortKey=k;sortDir=1;}
+  sortLevels=sortLevels.filter(function(s){return s.key!==k;});
+  sortLevels.unshift({key:k,dir:sortDir});
+  if(sortLevels.length>3)sortLevels=sortLevels.slice(0,3);
+  renderTable();
+}
+function getValForSort(r,key){
   var mvK=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed','taxSavings'];
-  var isMV=mvK.indexOf(sortKey)>=0,isPct=sortKey==='pctChange';
+  var v=r[key]||'';
+  if(mvK.indexOf(key)>=0)return parseMV(v)||0;
+  if(key==='pctChange')return parseFloat(v)||0;
+  return String(v).toLowerCase();
+}
+function sortedRows(rows){
+  var levels=sortLevels.length?sortLevels:(sortKey?[{key:sortKey,dir:sortDir}]:[]);
+  if(!levels.length)return rows;
   return rows.slice().sort(function(a,b){
-    var av=a[sortKey]||'',bv=b[sortKey]||'';
-    if(isMV){av=parseMV(av)||0;bv=parseMV(bv)||0;}
-    else if(isPct){av=parseFloat(av)||0;bv=parseFloat(bv)||0;}
-    else{av=String(av).toLowerCase();bv=String(bv).toLowerCase();}
-    return av<bv?-1*sortDir:av>bv?sortDir:0;
+    for(var i=0;i<levels.length;i++){
+      var lv=levels[i];
+      var av=getValForSort(a,lv.key),bv=getValForSort(b,lv.key);
+      if(av<bv)return -1*lv.dir;
+      if(av>bv)return lv.dir;
+    }
+    return 0;
   });
+}
+function removeSortLevel(idx){
+  sortLevels.splice(idx,1);
+  if(sortLevels.length){sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;}
+  else{sortKey=null;sortDir=1;}
+  renderTable();
+}
+function toggleSortLevelDir(idx){
+  if(!sortLevels[idx])return;
+  sortLevels[idx].dir*=-1;
+  if(idx===0){sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;}
+  renderTable();
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -899,7 +926,7 @@ function renderSidebar(){
 }
 
 function toggleExpand(cid){var c=getClient(cid);if(!c)return;c.expanded=c.expanded===false?true:false;saveDB();renderSidebar();}
-function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;renderSidebar();renderMain();var cl=getClient(cid);if(cl)updateMobTitle(cl.name);}
+function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='ledger';filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;sortLevels=[];renderSidebar();renderMain();var cl=getClient(cid);if(cl)updateMobTitle(cl.name);}
 function selectFolder(cid,fid){
   if(isClientSession()){
     var f=getFolder(cid,fid);
@@ -907,7 +934,7 @@ function selectFolder(cid,fid){
   }
   activeClientId=cid;activeFolderId=fid;
   activeTab=isMobile()?'summary':'ledger';
-  filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;
+  filterCAD='All';filterStatus='All';searchQ='';sortKey=null;sortDir=1;sortLevels=[];
   renderSidebar();renderMain();
   var cl=getClient(cid);var fo=getFolder(cid,fid);
   if(cl&&fo)updateMobTitle(cl.name+' \u00b7 '+fo.year);
@@ -1729,7 +1756,8 @@ function renderTable(){
   var thead='<thead><tr>';
   for(var i=0;i<vf.length;i++){
     var fld=vf[i];
-    var arr=fld.auto?'':sortKey===fld.k?(sortDir===1?' &#9650;':' &#9660;'):'<span style="opacity:.2"> &#9650;</span>';
+    var levelIdx=-1;for(var si=0;si<sortLevels.length;si++){if(sortLevels[si].key===fld.k){levelIdx=si;break;}}
+    var arr=fld.auto?'':(levelIdx>=0?(sortLevels[levelIdx].dir===1?' ↑':' ↓')+(sortLevels.length>1?'<sup style="font-size:8px;opacity:.7">'+(levelIdx+1)+'</sup>':''):'<span style="opacity:.2"> ↑</span>');
     var cls=fld.calc?' class="calc-col"':'';
     thead+='<th'+cls+' style="min-width:'+fld.w+'px'+(fld.auto?';cursor:default':'')+'"'+(fld.auto?'':' onclick="sortBy(\''+fld.k+'\')"')+'>'+esc(fld.label)+arr+'</th>';
   }
@@ -2310,6 +2338,23 @@ function renderTab(){
       +'<button class="btn btn-navy btn-sm" onclick="openPasteModal()">&#128203; Paste from Excel</button>'
       +'<button class="btn btn-navy btn-sm" onclick="addRow()">+ Add Row</button>'
       +'</div></div>'
+      +(sortLevels.length>1?(function(){
+          var FIELD_NAMES={cad:'CAD',account:'Account #',address:'Address',propName:'Property Name',propType:'Property Type',impType:'Improvement Type',owner:'Owner',priorVal:'Prior Value',prelim:'Prelim Market',prelimAppr:'Prelim Appr',finalAppr:'Final Appr',finalMkt:'Final Market',mktRed:'Mkt Reduction',pctChange:'% Change',taxRate:'Tax Rate',taxSavings:'Tax Savings',status:'Status',notes:'Notes'};
+          var s='<div style="display:flex;align-items:center;gap:6px;padding:6px 0;flex-wrap:wrap"><span style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Sort:</span>';
+          for(var si=0;si<sortLevels.length;si++){
+            var lv=sortLevels[si];
+            var nm=FIELD_NAMES[lv.key]||lv.key;
+            var badge=(si===0?'#002147':(si===1?'#34495e':'#7f8c8d'));
+            s+='<div style="display:inline-flex;align-items:center;gap:4px;background:'+badge+';color:#fff;font-size:10px;font-weight:600;border-radius:4px;padding:3px 8px">';
+            s+='<span style="opacity:.6;font-size:9px">'+(si+1)+'.</span> '+nm;
+            s+='<button onclick="toggleSortLevelDir('+si+')" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;padding:0 2px" title="Toggle direction">'+(lv.dir===1?'↑':'↓')+'</button>';
+            s+='<button onclick="removeSortLevel('+si+')" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:12px;padding:0" title="Remove">×</button>';
+            s+='</div>';
+          }
+          s+='<button onclick="sortLevels=[];sortKey=null;sortDir=1;renderTable()" style="font-size:10px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline">Clear all</button>';
+          s+='</div>';
+          return s;
+        })():'')
       +'<div id="tableWrap"></div>'
       +'<div class="legend">'
       +'<div class="legend-item"><div class="legend-dot" style="background:#FFF3CD;border-color:#FFC107"></div>Active Litigation</div>'
