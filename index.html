@@ -135,7 +135,29 @@ tfoot td.tl{text-align:left}
     </div>
   </div>
 
-<!-- Password Modal -->
+<!-- Date Range PDF Modal -->
+<div id="dateRangeModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-box" style="width:400px;text-align:center" onclick="event.stopPropagation()">
+    <div style="font-size:28px;margin-bottom:8px">&#128197;</div>
+    <h3 style="margin-bottom:6px">Custom Date Range PDF</h3>
+    <p style="margin-bottom:16px;color:#888;font-size:12px">Select the year range to include in the executive summary.</p>
+    <div style="display:flex;gap:12px;justify-content:center;margin-bottom:6px">
+      <div class="field" style="flex:1;text-align:left">
+        <label>From Year</label>
+        <select id="drFrom" style="width:100%;border:1px solid #ccc;border-radius:5px;padding:8px;font-size:13px"></select>
+      </div>
+      <div class="field" style="flex:1;text-align:left">
+        <label>To Year</label>
+        <select id="drTo" style="width:100%;border:1px solid #ccc;border-radius:5px;padding:8px;font-size:13px"></select>
+      </div>
+    </div>
+    <div id="drPreview" style="font-size:11px;color:#666;margin-bottom:14px;min-height:18px"></div>
+    <div class="modal-btns" style="justify-content:center">
+      <button class="btn" style="background:#eee;color:#333" onclick="document.getElementById('dateRangeModal').style.display='none'">Cancel</button>
+      <button class="btn" style="background:#8e44ad;color:#fff" onclick="exportPDFRange()">&#128196; Generate PDF</button>
+    </div>
+  </div>
+</div>
 <div id="pwModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closePwModal()">
   <div class="modal-box" style="width:360px;text-align:center" onclick="event.stopPropagation()">
     <div style="font-size:32px;margin-bottom:8px">🔒</div>
@@ -766,12 +788,29 @@ function exportExcel(){
     L.prior,L.prelim,L.prelimAppr||'Prelim Appr Value',L.finalAppr,L.finalMkt,
     'Market Reduction *','% Change *','Tax Rate','Tax Savings *','Status','Notes'];
 
+  // Legend colors for the color coordinator row
+  var legendItems=[
+    {label:'Active Litigation',bg:'#FFF3CD',border:'#FFC107'},
+    {label:'Arbitration',bg:'#CCE5FF',border:'#004085'},
+    {label:'Reduced Below Last Year',bg:'#D4EDDA',border:'#28A745'},
+    {label:'Awaiting Formal',bg:'#EAD5F5',border:'#9B59B6'},
+    {label:'Completed',bg:'#F8F9FA',border:'#adb5bd'},
+  ];
+
   var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
   html+='<head><meta charset="UTF-8"><style>td,th{font-family:Arial;font-size:9pt;}</style>';
-  html+='<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>'+f.year+' Ledger</x:Name><x:WorksheetOptions><x:FreezePanes/><x:FrozenNoSplit/><x:SplitHorizontal>1</x:SplitHorizontal><x:TopRowBottomPane>1</x:TopRowBottomPane><x:ActivePane>2</x:ActivePane></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->';
+  html+='<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>'+f.year+' Ledger</x:Name><x:WorksheetOptions><x:FreezePanes/><x:FrozenNoSplit/><x:SplitHorizontal>2</x:SplitHorizontal><x:TopRowBottomPane>2</x:TopRowBottomPane><x:ActivePane>2</x:ActivePane></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->';
   html+='</head><body><table>';
 
-  // Column header row (frozen)
+  // Row 1: Color legend coordinator (frozen with headers)
+  html+='<tr style="height:22px;">';
+  for(var li=0;li<legendItems.length;li++){
+    var leg=legendItems[li];
+    html+='<td colspan="'+(li===0?2:li===legendItems.length-1?NC-2-3*(legendItems.length-2):3)+'" style="background:'+leg.bg+';border:2px solid '+leg.border+';font-size:9px;font-weight:bold;color:#333;text-align:center;padding:3px 4px;white-space:nowrap;">'+leg.label+'</td>';
+  }
+  html+='</tr>';
+
+  // Row 2: Column header row (frozen)
   html+='<tr>';
   for(var hi=0;hi<ledgerHdrs.length;hi++)html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:center;padding:7px 6px;border-bottom:2px solid #C9A84C;white-space:nowrap;">'+esc(ledgerHdrs[hi])+'</td>';
   html+='</tr>';
@@ -784,6 +823,7 @@ function exportExcel(){
     var pv=parseFloat(r.pctChange)||0;
     var pctColor=pv<0?'#155724':pv>0?'#721c24':'#444';
     var redAmt=parseMV(r.mktRed)||0;var savAmt=parseMV(r.taxSavings)||0;
+    var displayStatus=r.status==='Completed'?'':r.status;
     html+='<tr>';
     html+='<td style="background:'+bg+';color:#888;font-size:9pt;text-align:center;padding:5px 6px;border:1px solid #eee;">'+(ri+1)+'</td>';
     html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.cad||'')+'</td>';
@@ -799,7 +839,7 @@ function exportExcel(){
     html+='<td style="background:'+bg+';color:'+pctColor+';font-weight:bold;font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(r.pctChange||'')+'</td>';
     html+='<td style="background:'+bg+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(r.taxRate||'')+'</td>';
     html+='<td style="background:'+bg+';color:'+(savAmt>0?'#155724':'#444')+';font-weight:'+(savAmt>0?'bold':'normal')+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(savAmt>0?fmtMV(savAmt):'')+'</td>';
-    html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(r.status||'')+'</td>';
+    html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(displayStatus)+'</td>';
     html+='<td style="background:'+bg+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+esc(r.notes||'')+'</td>';
     html+='</tr>';
   }
@@ -831,8 +871,7 @@ function exportExcel(){
 // ── PDF Export ─────────────────────────────────────────────────────────────────
 function showPdfMenu(){
   var menu=document.getElementById('pdfMenu');
-  if(menu.style.display==='none'||!menu.style.display){menu.style.display='block';}
-  else{menu.style.display='none';}
+  menu.style.display=(menu.style.display==='none'||!menu.style.display)?'block':'none';
 }
 function closePdfMenu(){
   var menu=document.getElementById('pdfMenu');
@@ -846,112 +885,176 @@ function buildExecSummaryHtml(cl, folders){
   var allRows=[];
   for(var fi=0;fi<folders.length;fi++)allRows=allRows.concat(folders[fi].rows||[]);
   var allReduced=countReduced(allRows);
+  var reducedBelowLast=allRows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
   var allTotalRed=allRows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
   var allSavings=totMV(allRows,'taxSavings');
   var allLit=allRows.filter(function(r){return r.status==='Active Litigation';}).length;
   var allArb=allRows.filter(function(r){return r.status==='Arbitration';}).length;
+  var allFormal=allRows.filter(function(r){return r.status==='Awaiting Formal';}).length;
   var isSingle=folders.length===1;
-  var yearLabel=isSingle?folders[0].year:'All Years';
+  var yearLabel=isSingle?folders[0].year:'All Years ('+folders.map(function(f){return f.year;}).join(', ')+')';
+  var pctReduced=allRows.length>0?((reducedBelowLast/allRows.length)*100).toFixed(1):0;
 
-  var h='<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>';
+  // Top reductions across all folders
+  var topRed=allRows.map(function(r){return{addr:r.address||'',owner:r.owner||'',cad:r.cad||'',prior:parseMV(r.priorVal)||0,finalAppr:parseMV(r.finalAppr)||0,savings:parseMV(r.taxSavings)||0,red:(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0)};})
+    .filter(function(r){return r.red>0;}).sort(function(a,b){return b.red-a.red;}).slice(0,5);
+
+  var h='<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>'+cl.name+' Executive Summary</title><style>';
   h+='*{box-sizing:border-box;margin:0;padding:0}';
-  h+='body{font-family:Arial,sans-serif;font-size:11px;color:#222;padding:24px}';
-  h+='.hdr{background:#002147;color:#C9A84C;font-weight:bold;font-size:18px;padding:14px 16px;border-bottom:4px solid #C9A84C;margin-bottom:4px}';
-  h+='.sub{background:#EEF2F7;color:#666;font-size:9px;padding:5px 16px;margin-bottom:14px}';
-  h+='.banner{background:#D4EDDA;color:#155724;font-weight:bold;font-size:20px;text-align:center;padding:16px;border:3px solid #28A745;margin-bottom:14px;border-radius:5px}';
-  h+='.sec{background:#002147;color:#fff;font-weight:bold;font-size:11px;padding:6px 10px;border-bottom:2px solid #C9A84C;margin-bottom:0}';
-  h+='table{border-collapse:collapse;width:100%;margin-bottom:14px}';
-  h+='th{background:#DCE8F4;color:#002147;font-weight:bold;font-size:9px;text-align:center;padding:5px 6px;border:1px solid #ccc}';
-  h+='td{font-size:10px;padding:5px 6px;border:1px solid #eee}';
-  h+='.kpi-val{background:#F0F6FF;color:#002147;font-weight:bold;font-size:16px;text-align:center;padding:9px 6px;border:2px solid #ddd}';
-  h+='.kpi-grn{background:#D4EDDA;color:#155724;font-weight:bold;font-size:16px;text-align:center;padding:9px 6px;border:2px solid #28A745}';
-  h+='.grn{color:#155724;font-weight:bold}';
-  h+='.navy{background:#002147;color:#fff;font-weight:bold}';
-  h+='.navy-grn{background:#002147;color:#a8d5b5;font-weight:bold}';
-  h+='.even{background:#fff}.odd{background:#EEF4FB}';
-  h+='.tr{text-align:right}.tc{text-align:center}';
-  h+='@media print{body{padding:12px}@page{margin:1cm}}';
-  h+='</style></head><body>';
+  h+='body{font-family:"Arial",sans-serif;font-size:11px;color:#1a1a1a;background:#fff}';
+  h+='.page{max-width:900px;margin:0 auto;padding:32px}';
+  // Header
+  h+='.firm-bar{background:#002147;color:rgba(255,255,255,0.5);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;padding:8px 20px;text-align:right}';
+  h+='.main-hdr{background:#002147;padding:22px 24px 18px;border-bottom:5px solid #C9A84C}';
+  h+='.main-hdr h1{color:#C9A84C;font-size:22px;font-weight:700;letter-spacing:.3px;margin-bottom:4px}';
+  h+='.main-hdr p{color:rgba(255,255,255,0.6);font-size:10px;letter-spacing:.5px}';
+  // Savings banner
+  h+='.savings-banner{background:linear-gradient(135deg,#1a7a3c,#28a745);color:#fff;text-align:center;padding:20px;margin:0}';
+  h+='.savings-banner .lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;opacity:.85;margin-bottom:6px}';
+  h+='.savings-banner .amt{font-size:36px;font-weight:900;letter-spacing:-1px}';
+  h+='.savings-banner .sub{font-size:10px;opacity:.75;margin-top:4px}';
+  // Key highlights
+  h+='.highlights{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:3px solid #C9A84C}';
+  h+='.hl-card{padding:14px 16px;border-right:1px solid #e8ecf0;background:#fff}';
+  h+='.hl-card:last-child{border-right:none}';
+  h+='.hl-card .hl-val{font-size:26px;font-weight:800;color:#002147;margin-bottom:2px}';
+  h+='.hl-card .hl-val.green{color:#1a7a3c}';
+  h+='.hl-card .hl-val.red{color:#c0392b}';
+  h+='.hl-card .hl-val.amber{color:#d68910}';
+  h+='.hl-card .hl-lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.8px;font-weight:600}';
+  h+='.hl-card .hl-sub{font-size:9px;color:#999;margin-top:2px}';
+  // Section headers
+  h+='.sec-hdr{background:#002147;color:#C9A84C;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:8px 16px;margin-top:18px}';
+  // Tables
+  h+='table{border-collapse:collapse;width:100%}';
+  h+='.data-table th{background:#002147;color:#fff;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;text-align:left;border-right:1px solid #1a3a5c}';
+  h+='.data-table th.tr{text-align:right}';
+  h+='.data-table td{padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:10px}';
+  h+='.data-table tr:nth-child(even) td{background:#f8f9fb}';
+  h+='.data-table .tr{text-align:right}';
+  h+='.data-table .tc{text-align:center}';
+  h+='.data-table .bold{font-weight:700}';
+  h+='.data-table .green{color:#1a7a3c;font-weight:700}';
+  h+='.data-table .navy-row td{background:#002147!important;color:#fff;font-weight:700}';
+  h+='.data-table .navy-row .green{color:#a8d5b5}';
+  // Key points box
+  h+='.keypoints{background:#fffbf0;border-left:4px solid #C9A84C;padding:14px 16px;margin-top:18px}';
+  h+='.keypoints h3{color:#002147;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}';
+  h+='.keypoints ul{padding-left:16px}';
+  h+='.keypoints li{font-size:10px;color:#333;margin-bottom:5px;line-height:1.5}';
+  h+='.keypoints li strong{color:#1a7a3c}';
+  h+='.keypoints li.warn strong{color:#c0392b}';
+  // Footer
+  h+='.footer{margin-top:24px;padding-top:12px;border-top:2px solid #002147;display:flex;justify-content:space-between;align-items:center}';
+  h+='.footer p{font-size:8px;color:#999;letter-spacing:.5px}';
+  h+='.footer .conf{font-size:8px;color:#C9A84C;font-weight:700;letter-spacing:1px;text-transform:uppercase}';
+  h+='@media print{.page{padding:16px}@page{margin:.75cm;size:letter}}</style></head><body>';
 
-  h+='<div class="hdr">'+esc(cl.name)+' &mdash; Property Tax Executive Summary &mdash; '+yearLabel+'</div>';
-  h+='<div class="sub">Prepared by Lane Property Tax Advocates &nbsp;|&nbsp; Confidential &nbsp;|&nbsp; All values reflect certified appraisal data</div>';
-  h+='<div class="banner">TOTAL TAX SAVINGS &mdash; '+yearLabel.toUpperCase()+': '+(allSavings>0?fmtMV(allSavings):'$0')+'</div>';
+  h+='<div class="page">';
+  // Firm bar
+  h+='<div class="firm-bar">Lane Property Tax Advocates &nbsp;&bull;&nbsp; Confidential &nbsp;&bull;&nbsp; Prepared '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div>';
+  // Main header
+  h+='<div class="main-hdr"><h1>'+esc(cl.name)+'</h1><p>PROPERTY TAX EXECUTIVE SUMMARY &nbsp;&bull;&nbsp; '+yearLabel.toUpperCase()+'</p></div>';
+  // Savings banner
+  h+='<div class="savings-banner"><div class="lbl">Total Tax Savings</div><div class="amt">'+(allSavings>0?fmtMV(allSavings):'$0')+'</div><div class="sub">'+yearLabel+' &nbsp;&bull;&nbsp; '+allRows.length+' Accounts</div></div>';
 
-  h+='<div class="sec">'+yearLabel+' Portfolio Summary</div>';
-  h+='<table><tr>';
-  var kl=['Total Accounts','Accts Reduced','Litigation','Arbitration','Total Value Reduced','Total Tax Savings'];
-  for(var k=0;k<kl.length;k++)h+='<th>'+kl[k]+'</th>';
-  h+='</tr><tr>';
-  var kv=[allRows.length,allReduced,allLit,allArb,allTotalRed>0?fmtMV(allTotalRed):'--',allSavings>0?fmtMV(allSavings):'--'];
-  for(var k=0;k<kv.length;k++)h+='<td class="'+(k>=4?'kpi-grn':'kpi-val')+'">'+kv[k]+'</td>';
-  h+='</tr></table>';
+  // Key highlights grid
+  h+='<div class="highlights">';
+  h+='<div class="hl-card"><div class="hl-val green">'+reducedBelowLast+'</div><div class="hl-lbl">Accounts Reduced Below Prior Year</div><div class="hl-sub">Out of '+allRows.length+' total accounts</div></div>';
+  h+='<div class="hl-card"><div class="hl-val green">'+(allTotalRed>0?fmtMV(allTotalRed):'$0')+'</div><div class="hl-lbl">Total Value Reduced</div><div class="hl-sub">Certified appraisal reductions</div></div>';
+  h+='<div class="hl-card"><div class="hl-val '+(allLit>0?'red':'green')+'">'+allLit+'</div><div class="hl-lbl">Active Litigation</div><div class="hl-sub">'+allArb+' Arbitration &nbsp;&bull;&nbsp; '+allFormal+' Awaiting Formal</div></div>';
+  h+='</div>';
 
-  // Year breakdown (only if multiple years)
+  // Key points
+  var keyPoints=[];
+  if(allSavings>0)keyPoints.push('<strong>'+fmtMV(allSavings)+'</strong> in total tax savings secured for '+yearLabel+'.');
+  if(reducedBelowLast>0)keyPoints.push('<strong>'+reducedBelowLast+' accounts</strong> received a reduction below the prior year certified value.');
+  if(allReduced>0)keyPoints.push('<strong>'+allReduced+' accounts</strong> received a reduction from the preliminary market value.');
+  if(allTotalRed>0)keyPoints.push('Portfolio appraised value was reduced by <strong>'+fmtMV(allTotalRed)+'</strong> in total.');
+  if(allLit>0)keyPoints.push({text:'<strong>'+allLit+' accounts</strong> are currently in active litigation — monitoring for further reductions.',warn:true});
+  if(allArb>0)keyPoints.push({text:'<strong>'+allArb+' accounts</strong> are in arbitration proceedings.',warn:true});
+  if(allFormal>0)keyPoints.push({text:'<strong>'+allFormal+' accounts</strong> are awaiting formal hearing.',warn:true});
+  if(topRed.length>0)keyPoints.push('Largest single reduction: <strong>'+fmtMV(topRed[0].red)+'</strong> at '+esc(topRed[0].addr)+'.');
+
+  h+='<div class="keypoints"><h3>&#9733; Key Highlights</h3><ul>';
+  for(var ki=0;ki<keyPoints.length;ki++){
+    var kp=keyPoints[ki];
+    if(typeof kp==='string')h+='<li>'+kp+'</li>';
+    else h+='<li class="warn">'+kp.text+'</li>';
+  }
+  h+='</ul></div>';
+
+  // Year breakdown (multi-year only)
   if(!isSingle){
-    h+='<div class="sec">Year-by-Year Breakdown</div>';
-    h+='<table><tr><th style="text-align:left">Tax Year</th><th>Accounts</th><th>Reduced</th><th>Litigation</th><th>Arbitration</th><th>Prior Value</th><th>Prelim Value</th><th>Value Reduced</th><th>Tax Savings</th></tr>';
+    h+='<div class="sec-hdr">Year-by-Year Breakdown</div>';
+    h+='<table class="data-table"><tr><th>Tax Year</th><th class="tr">Accounts</th><th class="tr">Reduced</th><th class="tr">Litigation</th><th class="tr">Prior Value</th><th class="tr">Prelim Value</th><th class="tr">Value Reduced</th><th class="tr">Tax Savings</th></tr>';
     for(var fi=0;fi<folders.length;fi++){
       var ff=folders[fi];var fr=ff.rows||[];
       var red=countReduced(fr);
+      var rbl=fr.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
       var tred=fr.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
       var sav=totMV(fr,'taxSavings');
       var lit2=fr.filter(function(r){return r.status==='Active Litigation';}).length;
-      var arb2=fr.filter(function(r){return r.status==='Arbitration';}).length;
-      var bg=fi%2===0?'even':'odd';
-      h+='<tr class="'+bg+'">';
-      h+='<td style="font-weight:bold;color:#002147">'+ff.year+'</td>';
-      h+='<td class="tc">'+fr.length+'</td><td class="tc">'+red+'</td><td class="tc">'+lit2+'</td><td class="tc">'+arb2+'</td>';
+      h+='<tr><td class="bold" style="color:#002147">'+ff.year+'</td>';
+      h+='<td class="tr">'+fr.length+'</td><td class="tr">'+rbl+'</td><td class="tr '+(lit2>0?'red':'')+'">'+lit2+'</td>';
       h+='<td class="tr">'+fmtMV(totMV(fr,'priorVal'))+'</td>';
       h+='<td class="tr">'+fmtMV(totMV(fr,'prelim'))+'</td>';
-      h+='<td class="tr grn">'+(tred>0?fmtMV(tred):'--')+'</td>';
-      h+='<td class="tr grn">'+(sav>0?fmtMV(sav):'--')+'</td>';
-      h+='</tr>';
+      h+='<td class="tr green">'+(tred>0?fmtMV(tred):'--')+'</td>';
+      h+='<td class="tr green">'+(sav>0?fmtMV(sav):'--')+'</td></tr>';
     }
-    h+='<tr><td class="navy">TOTAL</td>';
-    h+='<td class="navy tc">'+allRows.length+'</td><td class="navy tc">'+allReduced+'</td>';
-    h+='<td class="navy tc">'+allLit+'</td><td class="navy tc">'+allArb+'</td>';
-    h+='<td class="navy tr">'+fmtMV(totMV(allRows,'priorVal'))+'</td>';
-    h+='<td class="navy tr">'+fmtMV(totMV(allRows,'prelim'))+'</td>';
-    h+='<td class="navy-grn tr">'+(allTotalRed>0?fmtMV(allTotalRed):'--')+'</td>';
-    h+='<td class="navy-grn tr">'+(allSavings>0?fmtMV(allSavings):'--')+'</td>';
-    h+='</tr></table>';
+    h+='<tr class="navy-row"><td>TOTAL</td>';
+    h+='<td class="tr">'+allRows.length+'</td><td class="tr">'+reducedBelowLast+'</td><td class="tr">'+allLit+'</td>';
+    h+='<td class="tr">'+fmtMV(totMV(allRows,'priorVal'))+'</td>';
+    h+='<td class="tr">'+fmtMV(totMV(allRows,'prelim'))+'</td>';
+    h+='<td class="tr green">'+(allTotalRed>0?fmtMV(allTotalRed):'--')+'</td>';
+    h+='<td class="tr green">'+(allSavings>0?fmtMV(allSavings):'--')+'</td></tr>';
+    h+='</table>';
   }
 
   // Per-year county breakdown + top reductions
   for(var fi=0;fi<folders.length;fi++){
     var ff=folders[fi];var fr=ff.rows||[];var L=ff.labels;
-    h+='<div class="sec">'+ff.year+' Accounts by County</div>';
-    h+='<table><tr><th style="text-align:left">County</th><th>Accounts</th><th>% Portfolio</th><th style="text-align:right">'+esc(L.prior)+'</th></tr>';
+    h+='<div class="sec-hdr">'+ff.year+' &mdash; Accounts by County</div>';
+    h+='<table class="data-table"><tr><th>County</th><th class="tr">Accounts</th><th class="tr">% Portfolio</th><th class="tr">Reduced Below Prior</th><th class="tr">'+esc(L.prior)+'</th><th class="tr">Tax Savings</th></tr>';
     var CNTS=['Harris','Brazoria','Montgomery','Fort Bend','Galveston','San Jacinto','Other'];
-    var ci2=0;
     for(var ci=0;ci<CNTS.length;ci++){
       var co=CNTS[ci];var cr=fr.filter(function(r){return r.cad===co;});
       if(!cr.length)continue;
-      h+='<tr class="'+(ci2%2===0?'even':'odd')+'"><td>'+co+'</td><td class="tc">'+cr.length+'</td>';
-      h+='<td class="tc">'+(cr.length/fr.length*100).toFixed(1)+'%</td>';
-      h+='<td class="tr">'+fmtMV(totMV(cr,'priorVal'))+'</td></tr>';
-      ci2++;
+      var crbl=cr.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+      h+='<tr><td>'+co+'</td><td class="tr">'+cr.length+'</td>';
+      h+='<td class="tr">'+(cr.length/fr.length*100).toFixed(1)+'%</td>';
+      h+='<td class="tr green">'+crbl+'</td>';
+      h+='<td class="tr">'+fmtMV(totMV(cr,'priorVal'))+'</td>';
+      h+='<td class="tr green">'+(totMV(cr,'taxSavings')>0?fmtMV(totMV(cr,'taxSavings')):'--')+'</td></tr>';
     }
-    h+='<tr><td class="navy">TOTAL</td><td class="navy tc">'+fr.length+'</td><td class="navy tc">100%</td>';
-    h+='<td class="navy tr">'+fmtMV(totMV(fr,'priorVal'))+'</td></tr></table>';
+    var frbl=fr.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+    h+='<tr class="navy-row"><td>TOTAL</td><td class="tr">'+fr.length+'</td><td class="tr">100%</td>';
+    h+='<td class="tr green">'+frbl+'</td>';
+    h+='<td class="tr">'+fmtMV(totMV(fr,'priorVal'))+'</td>';
+    h+='<td class="tr green">'+(totMV(fr,'taxSavings')>0?fmtMV(totMV(fr,'taxSavings')):'--')+'</td></tr>';
+    h+='</table>';
 
-    var topRed=fr.map(function(r){return{addr:r.address||'',owner:r.owner||'',prior:parseMV(r.priorVal)||0,finalAppr:parseMV(r.finalAppr)||0,red:(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0)};})
+    var fTopRed=fr.map(function(r){return{addr:r.address||'',owner:r.owner||'',prior:parseMV(r.priorVal)||0,finalAppr:parseMV(r.finalAppr)||0,savings:parseMV(r.taxSavings)||0,red:(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0)};})
       .filter(function(r){return r.red>0;}).sort(function(a,b){return b.red-a.red;}).slice(0,10);
-    if(topRed.length){
-      h+='<div class="sec">'+ff.year+' Top Reductions</div>';
-      h+='<table><tr><th style="text-align:left">Address</th><th style="text-align:left">Owner</th><th>Prior Value</th><th>Final Appr</th><th>$ Reduced</th></tr>';
-      for(var ri=0;ri<topRed.length;ri++){
-        var tr3=topRed[ri];
-        h+='<tr class="'+(ri%2===0?'even':'odd')+'">';
+    if(fTopRed.length){
+      h+='<div class="sec-hdr">'+ff.year+' &mdash; Top Reductions</div>';
+      h+='<table class="data-table"><tr><th>#</th><th>Address</th><th>Owner</th><th class="tr">Prior Value</th><th class="tr">Final Appr</th><th class="tr">$ Reduced</th><th class="tr">Tax Savings</th></tr>';
+      for(var ri=0;ri<fTopRed.length;ri++){
+        var tr3=fTopRed[ri];
+        h+='<tr><td class="tc" style="color:#999">'+(ri+1)+'</td>';
         h+='<td>'+esc(tr3.addr)+'</td><td>'+esc(tr3.owner)+'</td>';
         h+='<td class="tr">'+fmtMV(tr3.prior)+'</td>';
         h+='<td class="tr">'+fmtMV(tr3.finalAppr)+'</td>';
-        h+='<td class="tr grn">'+fmtMV(tr3.red)+'</td></tr>';
+        h+='<td class="tr green">'+fmtMV(tr3.red)+'</td>';
+        h+='<td class="tr green">'+(tr3.savings>0?fmtMV(tr3.savings):'--')+'</td></tr>';
       }
       h+='</table>';
     }
   }
-  h+='</body></html>';
+
+  // Footer
+  h+='<div class="footer"><p>Lane Property Tax Advocates &nbsp;&bull;&nbsp; All values reflect certified appraisal data</p><p class="conf">Confidential &mdash; Client Use Only</p></div>';
+  h+='</div></body></html>';
   return h;
 }
 
@@ -961,13 +1064,46 @@ function exportPDF(mode){
   if(!cl||!cl.folders||!cl.folders.length){alert('Please select a client first.');return;}
   var folders=mode==='year'?[getActiveFolder()]:(cl.folders||[]);
   if(!folders[0]){alert('Please select a year folder first.');return;}
-  var yearLabel=mode==='year'?folders[0].year:'All Years';
   var html=buildExecSummaryHtml(cl,folders);
-  var w=window.open('','_blank','width=900,height=700');
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  setTimeout(function(){w.print();},600);
+  var w=window.open('','_blank','width=1000,height=750');
+  w.document.write(html);w.document.close();w.focus();
+  setTimeout(function(){w.print();},800);
+}
+
+function openDateRangeModal(){
+  closePdfMenu();
+  var cl=getClient(activeClientId);
+  if(!cl||!cl.folders||!cl.folders.length){alert('Please select a client first.');return;}
+  var years=cl.folders.map(function(f){return f.year;}).sort();
+  var fromSel=document.getElementById('drFrom');
+  var toSel=document.getElementById('drTo');
+  fromSel.innerHTML='';toSel.innerHTML='';
+  for(var i=0;i<years.length;i++){
+    fromSel.innerHTML+='<option value="'+years[i]+'">'+years[i]+'</option>';
+    toSel.innerHTML+='<option value="'+years[i]+'"'+(i===years.length-1?' selected':'')+'>'+years[i]+'</option>';
+  }
+  updateDrPreview();
+  fromSel.onchange=updateDrPreview;toSel.onchange=updateDrPreview;
+  document.getElementById('dateRangeModal').style.display='flex';
+}
+function updateDrPreview(){
+  var from=document.getElementById('drFrom').value;
+  var to=document.getElementById('drTo').value;
+  var cl=getClient(activeClientId);if(!cl)return;
+  var count=cl.folders.filter(function(f){return f.year>=from&&f.year<=to;}).length;
+  document.getElementById('drPreview').textContent=count+' year'+(count!==1?'s':'')+' selected ('+from+(from!==to?' \u2013 '+to:'')+')';
+}
+function exportPDFRange(){
+  var from=document.getElementById('drFrom').value;
+  var to=document.getElementById('drTo').value;
+  var cl=getClient(activeClientId);if(!cl)return;
+  var folders=cl.folders.filter(function(f){return f.year>=from&&f.year<=to;});
+  if(!folders.length){alert('No folders found in that range.');return;}
+  document.getElementById('dateRangeModal').style.display='none';
+  var html=buildExecSummaryHtml(cl,folders);
+  var w=window.open('','_blank','width=1000,height=750');
+  w.document.write(html);w.document.close();w.focus();
+  setTimeout(function(){w.print();},800);
 }
 
 
@@ -1116,6 +1252,8 @@ function renderMain(){
     +'<button onclick="exportPDF(\'year\')">&#128196; Current Year Summary</button>'
     +'<div class="pdf-divider"></div>'
     +'<button onclick="exportPDF(\'all\')">&#128196; All Years Summary</button>'
+    +'<div class="pdf-divider"></div>'
+    +'<button onclick="openDateRangeModal()">&#128197; Custom Date Range</button>'
     +'</div></div>'
     +'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="requireUnlock(function(){editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')})">&#9881; Edit Folder</button>'
     +'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="requireUnlock(function(){editClientModal(\''+activeClientId+'\')})">&#9881; Edit Client</button>'
