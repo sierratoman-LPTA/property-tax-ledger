@@ -8,8 +8,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222}
 :root{--navy:#002147;--gold:#C9A84C}
-#app{display:flex;height:100vh;overflow:hidden;visibility:hidden}
-#app.logged-in{visibility:visible}
+#app{display:flex;height:100vh;overflow:hidden}
 #sidebar{width:230px;min-width:230px;background:var(--navy);color:#fff;display:flex;flex-direction:column;overflow:hidden;height:100vh}
 #main{flex:1;overflow:auto;padding:18px}
 .sb-header{padding:16px 14px 10px;border-bottom:1px solid rgba(255,255,255,0.12);transition:background .15s}
@@ -471,7 +470,6 @@ function submitLogin(){
       document.getElementById('loginScreen').style.display='none';
       _unlocked=true;updateLockUI();
       applySessionUI();
-      document.getElementById('app').className='logged-in';
       renderSidebar();renderDashboard();
     } else {
       document.getElementById('loginError').textContent='Incorrect password.';
@@ -492,7 +490,6 @@ function submitLogin(){
       document.getElementById('loginScreen').style.display='none';
       _unlocked=false;updateLockUI();
       applySessionUI();
-      document.getElementById('app').className='logged-in';
       // Navigate to that client's latest folder
       activeClientId=matched.id;
       activeFolderId=null;
