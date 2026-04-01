@@ -1976,7 +1976,7 @@ function renderClientOverview(cl){
     h+='<div style="overflow-x:auto">';
     h+='<table style="width:100%;border-collapse:collapse;font-size:12px">';
     h+='<thead><tr>';
-    var thdrs=['Tax Year','Accounts','Prior Year Value','Prelim Market Value','Final Appraised Value','Value Reduced','Tax Savings','YoY Change'];
+    var thdrs=['Tax Year','Accounts','Accts % Change','Prior Year Value','Prelim Market Value','Final Appraised Value','Value Reduced','Tax Savings','Portfolio YoY'];
     for(var th=0;th<thdrs.length;th++){
       h+='<th style="background:#f0f2f5;color:#444;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:8px 12px;text-align:'+(th===0?'left':'right');
       if(th===thdrs.length-1)h+=';border-left:2px solid #ddd';
@@ -1984,15 +1984,25 @@ function renderClientOverview(cl){
     }
     h+='</tr></thead><tbody>';
 
-    var prevPrior=null;
+    var prevPrior=null;var prevAccounts=null;
     for(var fi3=0;fi3<folders.length;fi3++){
       var fo=folders[fi3];var frows=fo.rows||[];
+      var fAccounts=frows.length;
       var fPrior=totMV(frows,'priorVal');
       var fPrelim=totMV(frows,'prelim');
       var fFinalAppr=totMV(frows,'finalAppr');
       var fReduction=frows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
       var fSav=totMV(frows,'taxSavings');
       var rowBg=fi3%2===0?'#fff':'#f8f9fb';
+
+      // Accounts % change
+      var acctChgHtml='<span style="color:#aaa;font-size:10px">—</span>';
+      if(prevAccounts!==null&&prevAccounts>0){
+        var acctPct=((fAccounts-prevAccounts)/prevAccounts*100).toFixed(1);
+        var acctUp=parseFloat(acctPct)>0;
+        acctChgHtml='<span style="color:'+(acctUp?'#155724':'#c0392b')+';font-weight:700">'+(acctUp?'▲':'▼')+' '+Math.abs(acctPct)+'%</span>';
+      }
+      prevAccounts=fAccounts;
 
       // YoY change vs previous year prior value
       var yoyHtml='<span style="color:#aaa;font-size:10px">—</span>';
@@ -2005,7 +2015,8 @@ function renderClientOverview(cl){
 
       h+='<tr style="background:'+rowBg+';border-bottom:1px solid #eee">';
       h+='<td style="padding:10px 12px;font-weight:700;color:var(--navy)">'+esc(fo.year)+'</td>';
-      h+='<td style="padding:10px 12px;text-align:right">'+frows.length+'</td>';
+      h+='<td style="padding:10px 12px;text-align:right">'+fAccounts+'</td>';
+      h+='<td style="padding:10px 12px;text-align:right">'+acctChgHtml+'</td>';
       h+='<td style="padding:10px 12px;text-align:right">'+(fPrior>0?fmtMV(fPrior):'—')+'</td>';
       h+='<td style="padding:10px 12px;text-align:right">'+(fPrelim>0?fmtMV(fPrelim):'—')+'</td>';
       h+='<td style="padding:10px 12px;text-align:right">'+(fFinalAppr>0?fmtMV(fFinalAppr):'—')+'</td>';
@@ -2020,9 +2031,11 @@ function renderClientOverview(cl){
     var tPrelim=totMV(allRows,'prelim');
     var tFinal=totMV(allRows,'finalAppr');
     var tRed=allRows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+    var latestAccounts=(folders[folders.length-1].rows||[]).length;
     h+='<tr style="background:var(--navy)">';
     h+='<td style="padding:10px 12px;color:#C9A84C;font-weight:700;font-size:11px">ALL YEARS</td>';
-    h+='<td style="padding:10px 12px;text-align:right;color:#fff;font-weight:700">'+allRows.length+'</td>';
+    h+='<td style="padding:10px 12px;text-align:right;color:#fff;font-weight:700;font-size:10px">'+latestAccounts+' <span style="opacity:.6;font-size:9px">(current yr)</span></td>';
+    h+='<td style="padding:10px 12px;text-align:right"></td>';
     h+='<td style="padding:10px 12px;text-align:right;color:#fff;font-weight:700">'+(tPrior>0?fmtMV(tPrior):'—')+'</td>';
     h+='<td style="padding:10px 12px;text-align:right;color:#fff;font-weight:700">'+(tPrelim>0?fmtMV(tPrelim):'—')+'</td>';
     h+='<td style="padding:10px 12px;text-align:right;color:#fff;font-weight:700">'+(tFinal>0?fmtMV(tFinal):'—')+'</td>';
