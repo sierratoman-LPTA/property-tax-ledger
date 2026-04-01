@@ -1392,12 +1392,12 @@ function buildExecSummaryHtml(cl, folders){
   // Main header
   h+='<div class="main-hdr"><h1>'+esc(cl.name)+'</h1><p>PROPERTY TAX EXECUTIVE SUMMARY &nbsp;&bull;&nbsp; '+yearLabel.toUpperCase()+'</p></div>';
   // Savings banner
-  h+='<div class="savings-banner"><div class="lbl">Total Tax Savings</div><div class="amt">'+(allSavings>0?fmtMV(allSavings):'$0')+'</div><div class="sub">'+yearLabel+' &nbsp;&bull;&nbsp; '+allRows.length+' Accounts</div></div>';
+  h+='<div class="savings-banner"><div class="lbl">Total Tax Savings</div><div class="amt">'+(allSavings>0?fmtMV(allSavings):'')+'</div><div class="sub">'+yearLabel+' &nbsp;&bull;&nbsp; '+allRows.length+' Accounts</div></div>';
 
   // Key highlights grid
   h+='<div class="highlights">';
   h+='<div class="hl-card"><div class="hl-val green">'+reducedBelowLast+'</div><div class="hl-lbl">Accounts Reduced Below Prior Year</div><div class="hl-sub">Out of '+allRows.length+' total accounts</div></div>';
-  h+='<div class="hl-card"><div class="hl-val green">'+(allTotalRed>0?fmtMV(allTotalRed):'$0')+'</div><div class="hl-lbl">Total Value Reduced</div><div class="hl-sub">Certified appraisal reductions</div></div>';
+  h+='<div class="hl-card"><div class="hl-val green">'+(allTotalRed>0?fmtMV(allTotalRed):'')+'</div><div class="hl-lbl">Total Value Reduced</div><div class="hl-sub">Certified appraisal reductions</div></div>';
   h+='<div class="hl-card"><div class="hl-val '+(allLit>0?'red':'green')+'">'+allLit+'</div><div class="hl-lbl">Active Litigation</div><div class="hl-sub">'+allArb+' Arbitration &nbsp;&bull;&nbsp; '+allFormal+' Awaiting Formal</div></div>';
   h+='</div>';
 
@@ -1560,8 +1560,8 @@ function renderKPIs(){
   k=document.getElementById('kpi_reduced');if(k)k.textContent=reduced;
   k=document.getElementById('kpi_lit');if(k)k.textContent=lit;
   k=document.getElementById('kpi_arb');if(k)k.textContent=arb;
-  k=document.getElementById('kpi_savings');if(k)k.textContent=totalRed>0?'$'+Math.round(totalRed).toLocaleString():'$0';
-  k=document.getElementById('kpi_taxsavings');if(k)k.textContent=savings>0?'$'+Math.round(savings).toLocaleString():'$0';
+  k=document.getElementById('kpi_savings');if(k)k.textContent=totalRed>0?'$'+Math.round(totalRed).toLocaleString():'';
+  k=document.getElementById('kpi_taxsavings');if(k)k.textContent=savings>0?'$'+Math.round(savings).toLocaleString():'';
 }
 
 // ── Fields ─────────────────────────────────────────────────────────────────────
@@ -1875,7 +1875,7 @@ function renderDashboard(){
   h+='<div class="cc-totals" style="grid-template-columns:repeat(3,1fr)">';
   h+='<div class="cc-total"><div class="ct-val">'+clients.length+'</div><div class="ct-lbl">Total Clients</div></div>';
   h+='<div class="cc-total"><div class="ct-val">'+latestYearAccounts+'</div><div class="ct-lbl">Current Portfolio</div></div>';
-  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
+  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
   h+='</div>';
   h+='</div>';
 
@@ -1898,7 +1898,7 @@ function renderDashboard(){
     h+='<div class="cc-card" onclick="selectFolder(\''+c.id+'\',\''+(latestFolderId||'')+'\')">'; 
     h+='<div class="cc-card-hdr"><h3>'+esc(c.name)+'</h3><span class="cc-yr">'+esc(latestYear)+'</span></div>';
     h+='<div class="cc-card-body">';
-    h+='<div class="cc-savings">'+(cSavings>0?fmtMV(cSavings):'$0')+'<span>Total Tax Savings</span></div>';
+    h+='<div class="cc-savings">'+(cSavings>0?fmtMV(cSavings):'')+'<span>Total Tax Savings</span></div>';
     h+='<div class="cc-stats" style="grid-template-columns:1fr 1fr">';
     h+='<div class="cc-stat"><div class="sv">'+cAccounts+'</div><div class="sl">Current Portfolio</div></div>';
     h+='<div class="cc-stat"><div class="sv">'+folders.length+'</div><div class="sl">Years Tracked</div></div>';
@@ -1942,7 +1942,7 @@ function renderClientOverview(cl){
   // Always-accurate totals strip
   h+='<div class="cc-totals" style="grid-template-columns:repeat(3,1fr)">';
   h+='<div class="cc-total"><div class="ct-val">'+latestRows.length+'</div><div class="ct-lbl">Current Portfolio</div></div>';
-  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
+  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
   h+='<div class="cc-total"><div class="ct-val">'+folders.length+'</div><div class="ct-lbl">Years Tracked</div></div>';
   h+='</div>';
 
@@ -1987,7 +1987,7 @@ function renderClientOverview(cl){
     }
     h+='</div>';
     h+='<div class="cc-card-body">';
-    h+='<div class="cc-savings">'+(fSavings>0?fmtMV(fSavings):'$0')+'<span>Tax Savings</span></div>';
+    h+='<div class="cc-savings">'+(fSavings>0?fmtMV(fSavings):'')+'<span>Tax Savings</span></div>';
     h+='<div class="cc-stats">';
     h+='<div class="cc-stat"><div class="sv">'+rows.length+'</div><div class="sl">Accounts</div></div>';
     h+='<div class="cc-stat"><div class="sv green">'+fReduced+'</div><div class="sl">Reduced</div></div>';
@@ -2077,8 +2077,8 @@ function renderTab(){
       +'<div class="kpi"><div class="lbl">Accounts Reduced</div><div class="val" id="kpi_reduced">0</div></div>'
       +'<div class="kpi"><div class="lbl">Active Litigation</div><div class="val" id="kpi_lit">0</div></div>'
       +'<div class="kpi"><div class="lbl">Arbitration</div><div class="val" id="kpi_arb">0</div></div>'
-      +'<div class="kpi"><div class="lbl">Total Value Reduced</div><div class="val" id="kpi_savings">$0</div></div>'
-      +'<div class="kpi gold-border"><div class="lbl gold">Total Tax Savings</div><div class="val" id="kpi_taxsavings">$0</div></div>'
+      +'<div class="kpi"><div class="lbl">Total Value Reduced</div><div class="val" id="kpi_savings"></div></div>'
+      +'<div class="kpi gold-border"><div class="lbl gold">Total Tax Savings</div><div class="val" id="kpi_taxsavings"></div></div>'
       +'</div>'
       +'<div class="toolbar">'
       +'<input placeholder="Search address, owner, account..." value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderTable()"/>'
