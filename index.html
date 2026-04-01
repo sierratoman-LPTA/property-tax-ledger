@@ -856,7 +856,12 @@ function onSortFieldChange(idx,val){
   sortLevels[idx].key=val;
   if(idx===0){sortKey=val||null;sortDir=sortLevels[0].dir;}
   renderTable();
-  renderSortPanel();
+  renderKPIs();
+  // Rebuild the sort bar so direction dropdown updates to A→Z vs Low→High
+  var sortBar=document.getElementById('sortBar');
+  if(sortBar){
+    sortBar.innerHTML=buildSortRowHTML(0,'1st')+buildSortRowHTML(1,'2nd')+buildSortRowHTML(2,'3rd');
+  }
 }
 
 function onSortDirChange(idx,dir){
@@ -864,14 +869,17 @@ function onSortDirChange(idx,dir){
   sortLevels[idx].dir=parseInt(dir);
   if(idx===0&&sortLevels[0].key){sortKey=sortLevels[0].key;sortDir=sortLevels[0].dir;}
   renderTable();
-  // Don't re-render panel — direction select already shows correct value
 }
 
 function clearAllSorts(){
   sortLevels=[{key:'',dir:1},{key:'',dir:1},{key:'',dir:1}];
   sortKey=null;sortDir=1;
   renderTable();
-  renderSortPanel();
+  renderKPIs();
+  var sortBar=document.getElementById('sortBar');
+  if(sortBar){
+    sortBar.innerHTML=buildSortRowHTML(0,'1st')+buildSortRowHTML(1,'2nd')+buildSortRowHTML(2,'3rd');
+  }
 }
 
 function renderSortPanel(){
@@ -2845,6 +2853,31 @@ function renderMain(){
   renderTab();
 }
 
+function buildSortRowHTML(idx,label){
+  initSortLevels();
+  var lv=sortLevels[idx];
+  var isNum=MV_SORT_KEYS.indexOf(lv.key)>=0;
+  var fieldOpts='';
+  for(var i=0;i<SORT_FIELDS.length;i++){
+    var sf=SORT_FIELDS[i];
+    fieldOpts+='<option value="'+sf.k+'"'+(lv.key===sf.k?' selected':'')+'>'+sf.label+'</option>';
+  }
+  var dirOpts='';
+  if(isNum){
+    dirOpts+='<option value="1"'+(lv.dir===1?' selected':'')+'>Low→High</option>';
+    dirOpts+='<option value="-1"'+(lv.dir===-1?' selected':'')+'>High→Low</option>';
+  } else {
+    dirOpts+='<option value="1"'+(lv.dir===1?' selected':'')+'>A→Z</option>';
+    dirOpts+='<option value="-1"'+(lv.dir===-1?' selected':'')+'>Z→A</option>';
+  }
+  var badges=['#002147','#34495e','#7f8c8d'];
+  return '<div style="display:flex;align-items:center;gap:5px">'
+    +'<span style="font-size:9px;font-weight:700;color:'+badges[idx]+';white-space:nowrap;min-width:22px">'+label+'</span>'
+    +'<select onchange="onSortFieldChange('+idx+',this.value)" style="border:1px solid #ccc;border-radius:4px;padding:3px 5px;font-size:11px;background:#fff;color:#222">'+fieldOpts+'</select>'
+    +'<select onchange="onSortDirChange('+idx+',this.value)" '+(lv.key?'':'disabled')+' style="border:1px solid #ccc;border-radius:4px;padding:3px 5px;font-size:11px;background:#fff;color:'+(lv.key?'#222':'#aaa')+'">'+dirOpts+'</select>'
+    +'</div>';
+}
+
 function renderTab(){
   var f=getActiveFolder();if(!f)return;var el=document.getElementById('tabContent');
   if(activeTab==='activity'){el.innerHTML='<div id="activityContent"></div>';renderActivityLog();return;}
@@ -2877,8 +2910,15 @@ function renderTab(){
       +'<input placeholder="Search address, owner, account..." value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderTable()"/>'
       +'<select onchange="filterCAD=this.value;renderTable()">'+cadOpts+'</select>'
       +'<select onchange="filterStatus=this.value;renderTable()">'+stOpts+'</select>'
-      +'<button onclick="toggleSortPanel()" class="btn btn-sm" id="sortBtn" style="background:'+(sortLevels.filter(function(l){return l.key;}).length?'var(--navy)':'#eee')+';color:'+(sortLevels.filter(function(l){return l.key;}).length?'#fff':'#555')+';font-size:11px;position:relative" title="Multi-sort">&#9651; Sort'+(sortLevels.filter(function(l){return l.key;}).length?' ('+sortLevels.filter(function(l){return l.key;}).length+')':'')+'</button>'
-      +'<div id="sortPanel" style="position:absolute;top:38px;left:0;width:560px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>'
+      +'</div>'
+      +'<div style="background:#f0f2f5;border:1px solid #ddd;border-radius:7px;padding:10px 14px;margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+      +'<span style="font-size:10px;font-weight:700;color:#002147;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">&#9651; Sort:</span>'
+      +'<div id="sortBar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+      +buildSortRowHTML(0,'1st')
+      +buildSortRowHTML(1,'2nd')
+      +buildSortRowHTML(2,'3rd')
+      +'</div>'
+      +'<button onclick="clearAllSorts()" style="font-size:10px;color:#aaa;background:none;border:1px solid #ddd;border-radius:4px;padding:3px 9px;cursor:pointer;white-space:nowrap">Clear</button>'
       +'</div>'
       +'<button onclick="viewMode=viewMode===\'full\'?\'basic\':\'full\';renderTable()" class="btn btn-sm" style="background:'+(viewMode==='full'?'var(--navy)':'#eee')+';color:'+(viewMode==='full'?'#fff':'#555')+';font-size:11px" title="Toggle expanded columns">&#8644; '+(viewMode==='full'?'Full View':'Expand')+'</button>'
       +'<div style="margin-left:auto;display:flex;gap:6px">'
