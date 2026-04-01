@@ -1305,12 +1305,14 @@ function renderDashboard(){
     el.innerHTML=h;return;
   }
 
-  // Portfolio-wide totals strip
-  h+='<div class="cc-totals">';
+  var latestYearAccounts=0;
+  for(var ci2=0;ci2<clients.length;ci2++){var cfl2=clients[ci2].folders||[];if(cfl2.length)latestYearAccounts+=(cfl2[cfl2.length-1].rows||[]).length;}
+  var totalYearsTracked=clients.reduce(function(s,c){return s+(c.folders?c.folders.length:0);},0);
+  h+='<div class="cc-totals" style="grid-template-columns:repeat(3,1fr)">';
   h+='<div class="cc-total"><div class="ct-val">'+clients.length+'</div><div class="ct-lbl">Total Clients</div></div>';
-  h+='<div class="cc-total"><div class="ct-val">'+totalAccounts+'</div><div class="ct-lbl">Total Accounts</div></div>';
-  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings</div></div>';
-  h+='<div class="cc-total '+(totalLit>0?'red':'')+'"><div class="ct-val">'+totalLit+'</div><div class="ct-lbl">Active Litigation</div></div>';
+  h+='<div class="cc-total"><div class="ct-val">'+latestYearAccounts+'</div><div class="ct-lbl">Total Accounts (Latest Year)</div></div>';
+  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
+  h+='</div>';
   h+='</div>';
 
   // Client cards
@@ -1323,29 +1325,21 @@ function renderDashboard(){
     var cRows=[];
     for(var fi=0;fi<folders.length;fi++)cRows=cRows.concat(folders[fi].rows||[]);
     var cSavings=totMV(cRows,'taxSavings');
-    var cAccounts=cRows.length;
-    var cLit=cRows.filter(function(r){return r.status==='Active Litigation';}).length;
-    var cArb=cRows.filter(function(r){return r.status==='Arbitration';}).length;
-    var cFormal=cRows.filter(function(r){return r.status==='Awaiting Formal';}).length;
-    var cReduced=cRows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
     // Most recent year
-    var latestYear=folders.length?folders[folders.length-1].year:'--';
-    var latestFolderId=folders.length?folders[folders.length-1].id:null;
+    var latestFolder2=folders.length?folders[folders.length-1]:null;
+    var cAccounts=latestFolder2?(latestFolder2.rows||[]).length:0;
+    var latestYear=latestFolder2?latestFolder2.year:'--';
+    var latestFolderId=latestFolder2?latestFolder2.id:null;
 
     h+='<div class="cc-card" onclick="selectFolder(\''+c.id+'\',\''+(latestFolderId||'')+'\')">'; 
     h+='<div class="cc-card-hdr"><h3>'+esc(c.name)+'</h3><span class="cc-yr">'+esc(latestYear)+'</span></div>';
     h+='<div class="cc-card-body">';
-    h+='<div class="cc-savings">'+(cSavings>0?fmtMV(cSavings):'$0')+'<span>Tax Savings</span></div>';
-    h+='<div class="cc-stats">';
-    h+='<div class="cc-stat"><div class="sv">'+cAccounts+'</div><div class="sl">Accounts</div></div>';
-    h+='<div class="cc-stat"><div class="sv green">'+cReduced+'</div><div class="sl">Reduced</div></div>';
-    h+='<div class="cc-stat"><div class="sv '+(cLit>0?'red':'')+'">'+cLit+'</div><div class="sl">Litigation</div></div>';
+    h+='<div class="cc-savings">'+(cSavings>0?fmtMV(cSavings):'$0')+'<span>Total Tax Savings</span></div>';
+    h+='<div class="cc-stats" style="grid-template-columns:1fr 1fr">';
+    h+='<div class="cc-stat"><div class="sv">'+cAccounts+'</div><div class="sl">Accounts ('+latestYear+')</div></div>';
+    h+='<div class="cc-stat"><div class="sv">'+folders.length+'</div><div class="sl">Years Tracked</div></div>';
     h+='</div></div>';
-    h+='<div class="cc-card-ftr">';
-    h+='<span>&#128193; '+folders.length+' year'+(folders.length!==1?'s':'')+'</span>';
-    if(cArb>0)h+='<span style="color:#004085">&#9632; '+cArb+' Arbitration</span>';
-    if(cFormal>0)h+='<span style="color:#9B59B6">&#9632; '+cFormal+' Awaiting Formal</span>';
-    h+='</div>';
+    h+='<div class="cc-card-ftr"><span>&#128193; '+folders.length+' year'+(folders.length!==1?'s':'')+' tracked</span></div>';
     h+='</div>';
   }
 
@@ -1369,6 +1363,10 @@ function renderClientOverview(cl){
   var totalFormal=allRows.filter(function(r){return r.status==='Awaiting Formal';}).length;
   var totalTotalRed=allRows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
 
+  // Use most recent year for accounts
+  var latestFolder=folders.length?folders[folders.length-1]:null;
+  var latestRows=latestFolder?latestFolder.rows||[]:[];
+
   var h='<div class="cc-wrap">';
 
   // Client hero
@@ -1377,12 +1375,11 @@ function renderClientOverview(cl){
   h+='<p>'+esc(cl.firm||'Lane Property Tax Advocates')+' &nbsp;&bull;&nbsp; '+folders.length+' Tax Year'+(folders.length!==1?'s':'')+'</p>';
   h+='</div>';
 
-  // All-years totals strip
-  h+='<div class="cc-totals">';
-  h+='<div class="cc-total"><div class="ct-val">'+totalAccounts+'</div><div class="ct-lbl">Total Accounts</div></div>';
-  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings</div></div>';
-  h+='<div class="cc-total green"><div class="ct-val">'+totalReduced+'</div><div class="ct-lbl">Reduced Below Prior Year</div></div>';
-  h+='<div class="cc-total '+(totalLit>0?'red':'')+'"><div class="ct-val">'+totalLit+'</div><div class="ct-lbl">Active Litigation</div></div>';
+  // Always-accurate totals strip
+  h+='<div class="cc-totals" style="grid-template-columns:repeat(3,1fr)">';
+  h+='<div class="cc-total"><div class="ct-val">'+latestRows.length+'</div><div class="ct-lbl">Total Accounts ('+(latestFolder?latestFolder.year:'--')+')</div></div>';
+  h+='<div class="cc-total green"><div class="ct-val">'+(totalSavings>0?fmtMV(totalSavings):'$0')+'</div><div class="ct-lbl">Total Tax Savings (All Years)</div></div>';
+  h+='<div class="cc-total"><div class="ct-val">'+folders.length+'</div><div class="ct-lbl">Years Tracked</div></div>';
   h+='</div>';
 
   if(totalArb>0||totalFormal>0){
