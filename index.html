@@ -453,23 +453,33 @@ dbRef.on('value',function(snap){
       var saved=sessionStorage.getItem('ptl_session');
       if(saved){
         var sess=JSON.parse(saved);
-        if(sess.type==='staff'){
-          _clientSession=null;_unlocked=true;
+        if(sess.type==='creator'){
+          _clientSession=null;_employeeId=null;_sessionType='creator';
+          _unlocked=true;
           document.getElementById('loginScreen').style.display='none';
           updateLockUI();applySessionUI();
           renderSidebar();renderDashboard();
-          setTimeout(function(){setSyncDot('ok');},50);
-          return;
-        } else if(sess.type==='client'&&sess.id){
-          var matched=getClient(sess.id);
-          if(matched){
-            _clientSession=matched.id;_unlocked=false;
+          setTimeout(function(){setSyncDot('ok');},50);return;
+        } else if(sess.type==='employee'&&sess.id){
+          var emp2=(db.employees||[]).filter(function(e){return e.id===sess.id;})[0];
+          if(emp2){
+            _clientSession=null;_employeeId=emp2.id;_sessionType='employee';
+            _unlocked=emp2.role==='editor';
             document.getElementById('loginScreen').style.display='none';
             updateLockUI();applySessionUI();
-            activeClientId=matched.id;activeFolderId=null;
+            renderSidebar();renderDashboard();
+            setTimeout(function(){setSyncDot('ok');},50);return;
+          }
+        } else if(sess.type==='client'&&sess.id){
+          var matched2=getClient(sess.id);
+          if(matched2){
+            _clientSession=matched2.id;_employeeId=null;_sessionType='client';
+            _unlocked=false;
+            document.getElementById('loginScreen').style.display='none';
+            updateLockUI();applySessionUI();
+            activeClientId=matched2.id;activeFolderId=null;
             renderSidebar();renderMain();
-            setTimeout(function(){setSyncDot('ok');},50);
-            return;
+            setTimeout(function(){setSyncDot('ok');},50);return;
           }
         }
       }
@@ -499,13 +509,19 @@ var pasteRows=[],pasteHdrs=[];
 var fileRows=[],fileHdrs=[],importFileName='';
 var undoStack=[];
 var _unlocked=false;
-var _PASS='798271';  // ← change this to your preferred password
+var _PASS='798271';  // ← Creator master password
 var _pendingAction=null;
 var _loginMode='staff';
 var _clientSession=null;
+var _sessionType=null; // 'creator', 'employee', 'client'
+var _employeeId=null;  // set when logged in as employee
 
 // ── Lock / Unlock ──────────────────────────────────────────────────────────────
 function requireUnlock(fn){
+  // Clients and viewer employees can never unlock
+  if(isClientSession()||(isEmployee()&&!_unlocked)){
+    alert('You do not have permission to make changes.');return;
+  }
   if(_unlocked){fn();return;}
   _pendingAction=fn;
   document.getElementById('pwInput').value='';
@@ -566,12 +582,13 @@ function initLoginScreen(){
 }
 function applySessionUI(){
   var isClient=isClientSession();
+  var isEmp=isEmployee();
   var hint=document.getElementById('homeHint');
   var footer=document.getElementById('sbFooter');
   var lockBar=document.querySelector('.lock-bar');
   if(hint)hint.style.display=isClient?'none':'';
   if(footer)footer.style.display=isClient?'none':'';
-  if(lockBar)lockBar.style.display=isClient?'none':'';
+  if(lockBar)lockBar.style.display=(isClient||isEmp)?'none':'';
   setTimeout(syncMobLogo,100);
 }
 function switchLoginTab(mode){
@@ -587,39 +604,50 @@ function switchLoginTab(mode){
 function submitLogin(){
   var val=document.getElementById('loginInput').value.trim();
   if(!val){document.getElementById('loginError').textContent='Please enter a password.';return;}
+
   if(_loginMode==='staff'){
+    // Check creator master password first
     if(val===_PASS){
-      _clientSession=null;
-      sessionStorage.setItem('ptl_session',JSON.stringify({type:'staff'}));
+      _clientSession=null;_employeeId=null;_sessionType='creator';
+      sessionStorage.setItem('ptl_session',JSON.stringify({type:'creator'}));
       document.getElementById('loginScreen').style.display='none';
-      _unlocked=true;updateLockUI();
-      applySessionUI();
+      _unlocked=true;updateLockUI();applySessionUI();
       renderSidebar();renderDashboard();
-    } else {
-      document.getElementById('loginError').textContent='Incorrect password.';
-      document.getElementById('loginInput').value='';
-      document.getElementById('loginInput').focus();
+      return;
     }
+    // Check employee codes
+    var emp=null;
+    for(var i=0;i<(db.employees||[]).length;i++){
+      var e=db.employees[i];
+      if(e.code&&e.code.trim()&&val.toUpperCase()===e.code.trim().toUpperCase()){emp=e;break;}
+    }
+    if(emp){
+      _clientSession=null;_employeeId=emp.id;_sessionType='employee';
+      var isEditor=emp.role==='editor';
+      sessionStorage.setItem('ptl_session',JSON.stringify({type:'employee',id:emp.id}));
+      document.getElementById('loginScreen').style.display='none';
+      _unlocked=isEditor;updateLockUI();applySessionUI();
+      renderSidebar();renderDashboard();
+      return;
+    }
+    document.getElementById('loginError').textContent='Incorrect password or code.';
+    document.getElementById('loginInput').value='';
+    document.getElementById('loginInput').focus();
+
   } else {
-    // Check against all client codes
+    // Client access
     var matched=null;
     for(var i=0;i<(db.clients||[]).length;i++){
       var c=db.clients[i];
-      if(c.clientCode&&c.clientCode.trim()&&val.toUpperCase()===c.clientCode.trim().toUpperCase()){
-        matched=c;break;
-      }
+      if(c.clientCode&&c.clientCode.trim()&&val.toUpperCase()===c.clientCode.trim().toUpperCase()){matched=c;break;}
     }
     if(matched){
-      _clientSession=matched.id;
+      _clientSession=matched.id;_employeeId=null;_sessionType='client';
       sessionStorage.setItem('ptl_session',JSON.stringify({type:'client',id:matched.id}));
       document.getElementById('loginScreen').style.display='none';
-      _unlocked=false;updateLockUI();
-      applySessionUI();
-      // Navigate to that client's latest folder
-      activeClientId=matched.id;
-      activeFolderId=null;
-      renderSidebar();
-      renderMain();
+      _unlocked=false;updateLockUI();applySessionUI();
+      activeClientId=matched.id;activeFolderId=null;
+      renderSidebar();renderMain();
     } else {
       document.getElementById('loginError').textContent='Access code not recognised.';
       document.getElementById('loginInput').value='';
@@ -627,8 +655,13 @@ function submitLogin(){
     }
   }
 }
-function isClientSession(){return _clientSession!==null;}
+function isCreator(){return _sessionType==='creator';}
+function isEmployee(){return _sessionType==='employee';}
+function isClientSession(){return _sessionType==='client';}
 function canSeeClient(cid){
+  if(!isClientSession())return true;
+  return cid===_clientSession;
+}
   if(!isClientSession())return true;
   return cid===_clientSession;
 }
@@ -1580,6 +1613,84 @@ function renderSummary(){
 }
 
 // ── Command Center Dashboard ───────────────────────────────────────────────────
+// ── Team Management ────────────────────────────────────────────────────────────
+function renderTeamPage(){
+  if(!isCreator()){return;}
+  var el=document.getElementById('content');
+  if(!db.employees)db.employees=[];
+  var emps=db.employees;
+
+  var h='<div class="cc-wrap">';
+  h+='<div class="cc-hero" style="margin-bottom:20px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+  h+='<div><h1>Team Management</h1><p>Lane Property Tax Advocates &nbsp;&bull;&nbsp; Staff Access Control</p></div>';
+  h+='<button onclick="renderDashboard()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;border-radius:6px;padding:7px 14px;font-size:11px;font-weight:600;cursor:pointer">&#8592; Back</button>';
+  h+='</div></div>';
+
+  // Add employee form
+  h+='<div style="background:#fff;border:1px solid #e0e6ef;border-radius:10px;padding:20px;margin-bottom:20px">';
+  h+='<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Add Team Member</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">';
+  h+='<div><label style="font-size:10px;font-weight:600;color:#666;display:block;margin-bottom:4px">Full Name</label>'
+   +'<input id="emp_name" placeholder="e.g. Sarah Johnson" style="width:100%;border:1.5px solid #ccc;border-radius:6px;padding:8px 10px;font-size:13px"/></div>';
+  h+='<div><label style="font-size:10px;font-weight:600;color:#666;display:block;margin-bottom:4px">Access Code <span style="opacity:.6">(they use this to log in)</span></label>'
+   +'<input id="emp_code" placeholder="e.g. SARAH2025" style="width:100%;border:1.5px solid #ccc;border-radius:6px;padding:8px 10px;font-size:13px;letter-spacing:1px;text-transform:uppercase"/></div>';
+  h+='<button onclick="addEmployee()" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:9px 18px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">+ Add Member</button>';
+  h+='</div></div>';
+
+  // Employee list
+  h+='<div style="background:#fff;border:1px solid #e0e6ef;border-radius:10px;overflow:hidden">';
+  h+='<div style="background:var(--navy);padding:12px 20px;display:grid;grid-template-columns:1fr 140px 140px 80px;gap:10px">';
+  h+='<div style="color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase">Team Member</div>';
+  h+='<div style="color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase">Access Code</div>';
+  h+='<div style="color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase">Role</div>';
+  h+='<div></div>';
+  h+='</div>';
+
+  if(!emps.length){
+    h+='<div style="padding:32px;text-align:center;color:#aaa;font-size:13px">No team members added yet.</div>';
+  } else {
+    for(var i=0;i<emps.length;i++){
+      var emp=emps[i];var bg=i%2===0?'#fff':'#f8f9fb';
+      h+='<div style="background:'+bg+';padding:12px 20px;display:grid;grid-template-columns:1fr 140px 140px 80px;gap:10px;align-items:center;border-top:1px solid #eee">';
+      h+='<div style="font-size:13px;font-weight:600;color:#222">'+esc(emp.name)+'</div>';
+      h+='<div style="font-size:12px;font-family:monospace;color:#555;background:#f0f2f5;padding:4px 8px;border-radius:4px;letter-spacing:1px">'+esc(emp.code)+'</div>';
+      h+='<div>'
+       +'<select onchange="setEmployeeRole(\''+emp.id+'\',this.value)" style="border:1.5px solid '+(emp.role==='editor'?'#28a745':'#ccc')+';border-radius:5px;padding:5px 8px;font-size:12px;font-weight:600;color:'+(emp.role==='editor'?'#155724':'#333')+';background:'+(emp.role==='editor'?'#d4edda':'#fff')+'">'
+       +'<option value="viewer"'+(emp.role==='viewer'||!emp.role?' selected':'')+'>&#128065; Viewer</option>'
+       +'<option value="editor"'+(emp.role==='editor'?' selected':'')+'>&#9999;&#65039; Editor</option>'
+       +'</select></div>';
+      h+='<div><button onclick="removeEmployee(\''+emp.id+'\')" style="background:none;border:1px solid #dc3545;color:#dc3545;border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600">Remove</button></div>';
+      h+='</div>';
+    }
+  }
+  h+='</div></div>';
+  el.innerHTML=h;
+}
+function addEmployee(){
+  var name=document.getElementById('emp_name').value.trim();
+  var code=document.getElementById('emp_code').value.trim().toUpperCase();
+  if(!name||!code){alert('Please enter both a name and access code.');return;}
+  // Check for duplicate code
+  for(var i=0;i<(db.employees||[]).length;i++){
+    if(db.employees[i].code.toUpperCase()===code){alert('That access code is already in use. Please choose a different one.');return;}
+  }
+  if(!db.employees)db.employees=[];
+  db.employees.push({id:uid(),name:name,code:code,role:'viewer'});
+  saveDB();renderTeamPage();
+}
+function setEmployeeRole(id,role){
+  var emp=(db.employees||[]).filter(function(e){return e.id===id;})[0];
+  if(!emp)return;
+  emp.role=role;
+  saveDB();renderTeamPage();
+}
+function removeEmployee(id){
+  if(!confirm('Remove this team member?'))return;
+  db.employees=(db.employees||[]).filter(function(e){return e.id!==id;});
+  saveDB();renderTeamPage();
+}
+
 function renderDashboard(){
   var el=document.getElementById('content');
   var clients=db.clients||[];
@@ -1605,6 +1716,11 @@ function renderDashboard(){
   h+='<img src="data:image/png;base64,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" style="height:52px;margin-bottom:12px;display:block" alt="Lane Property Tax Advocates"/>';
   h+='<p>Property Tax Ledger &nbsp;&bull;&nbsp; Command Center</p>';
   h+='<div class="cc-date">'+dateStr+'</div>';
+  if(isCreator()){
+    h+='<div style="margin-top:14px">'
+     +'<button onclick="renderTeamPage()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;border-radius:6px;padding:7px 16px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.3px">&#128101; Manage Team</button>'
+     +'</div>';
+  }
   h+='</div>';
 
   if(!clients.length){
