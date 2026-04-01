@@ -647,18 +647,114 @@ function importFile(){
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────────
-// Helper: count reduced accounts (finalAppr below prelim or prior)
 function countReduced(rows){
   return rows.filter(function(r){
-    var fv=parseMV(r.finalAppr);if(fv===null)return false;
-    var prior=parseMV(r.priorVal);var prelim=parseMV(r.prelimAppr)||parseMV(r.prelim);
-    return (prior!==null&&fv<prior)||(prelim!==null&&fv<prelim);
+    var fv=parseMV(r.finalMkt);if(fv===null)return false;
+    var prelim=parseMV(r.prelim);
+    return prelim!==null&&fv<prelim;
   }).length;
 }
 
-// Helper: render the per-year ledger rows into html, returns html string
-function buildLedgerTab(cl,f){
-  var rows=f.rows||[];var L=f.labels;var NC=19;
+function setCell(ws,col,row,val,style){
+  var addr=XLSX.utils.encode_cell({c:col,r:row});
+  var cell={v:val,t:typeof val==='number'?'n':'s'};
+  if(style)cell.s=style;
+  ws[addr]=cell;
+}
+function mergeRange(ws,rs,re,cs,ce){
+  if(!ws['!merges'])ws['!merges']=[];
+  ws['!merges'].push({s:{r:rs,c:cs},e:{r:re,c:ce}});
+}
+
+var SNAV={fill:{fgColor:{rgb:'002147'}},font:{color:{rgb:'C9A84C'},bold:true,sz:13},alignment:{horizontal:'left',vertical:'center'}};
+var SSUB={fill:{fgColor:{rgb:'EEF2F7'}},font:{color:{rgb:'666666'},sz:8}};
+var SBANNER={fill:{fgColor:{rgb:'D4EDDA'}},font:{color:{rgb:'155724'},bold:true,sz:15},alignment:{horizontal:'center',vertical:'center'}};
+var SSEC={fill:{fgColor:{rgb:'002147'}},font:{color:{rgb:'FFFFFF'},bold:true,sz:10}};
+var SKLH={fill:{fgColor:{rgb:'DCE8F4'}},font:{color:{rgb:'002147'},bold:true,sz:8},alignment:{horizontal:'center'}};
+var SKLV={fill:{fgColor:{rgb:'F0F6FF'}},font:{color:{rgb:'002147'},bold:true,sz:12},alignment:{horizontal:'center'}};
+var SKVG={fill:{fgColor:{rgb:'D4EDDA'}},font:{color:{rgb:'155724'},bold:true,sz:12},alignment:{horizontal:'center'}};
+var STBH={fill:{fgColor:{rgb:'DCE8F4'}},font:{color:{rgb:'002147'},bold:true,sz:8},alignment:{horizontal:'center'}};
+var STBHR={fill:{fgColor:{rgb:'DCE8F4'}},font:{color:{rgb:'002147'},bold:true,sz:8},alignment:{horizontal:'right'}};
+var SFOOT={fill:{fgColor:{rgb:'002147'}},font:{color:{rgb:'FFFFFF'},bold:true,sz:9},alignment:{horizontal:'right'}};
+var SFOOTL={fill:{fgColor:{rgb:'002147'}},font:{color:{rgb:'FFFFFF'},bold:true,sz:9},alignment:{horizontal:'left'}};
+var SFOOTG={fill:{fgColor:{rgb:'002147'}},font:{color:{rgb:'A8D5B5'},bold:true,sz:9},alignment:{horizontal:'right'}};
+var SCOLHDR={fill:{fgColor:{rgb:'002147'}},font:{color:{rgb:'FFFFFF'},bold:true,sz:9},alignment:{horizontal:'center',wrapText:true}};
+var SCOLHDRG={fill:{fgColor:{rgb:'002147'}},font:{color:{rgb:'C9A84C'},bold:true,sz:9},alignment:{horizontal:'center',wrapText:true}};
+function rowStyle(status,ri,right,green){
+  var bg;
+  if(status==='Active Litigation')bg='FFF3CD';
+  else if(status==='Arbitration')bg='CCE5FF';
+  else if(status==='Reduced Below Last Year')bg='D4EDDA';
+  else if(status==='Completed')bg='F8F9FA';
+  else bg=ri%2===0?'FFFFFF':'EEF4FB';
+  if(green)return{fill:{fgColor:{rgb:bg}},font:{color:{rgb:'155724'},bold:true,sz:9},alignment:{horizontal:'right'}};
+  if(right)return{fill:{fgColor:{rgb:bg}},font:{sz:9},alignment:{horizontal:'right'}};
+  return{fill:{fgColor:{rgb:bg}},font:{sz:9}};
+}
+
+function buildExecSheet(cl){
+  var ws={};
+  var allRows=[];
+  for(var fi=0;fi<cl.folders.length;fi++)allRows=allRows.concat(cl.folders[fi].rows||[]);
+  var allReduced=countReduced(allRows);
+  var allTotalRed=allRows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+  var allSavings=totMV(allRows,'taxSavings');
+  var allLit=allRows.filter(function(r){return r.status==='Active Litigation';}).length;
+  var allArb=allRows.filter(function(r){return r.status==='Arbitration';}).length;
+  var NC=8;var r=0;
+
+  setCell(ws,0,r,cl.name+' — Property Tax Executive Summary',SNAV);mergeRange(ws,r,r,0,NC);r++;
+  setCell(ws,0,r,'Prepared by Lane Property Tax Advocates | Confidential | All values reflect certified appraisal data',SSUB);mergeRange(ws,r,r,0,NC);r++;
+  r++;
+  setCell(ws,0,r,'TOTAL TAX SAVINGS — ALL YEARS: '+(allSavings>0?fmtMV(allSavings):'$0'),SBANNER);mergeRange(ws,r,r,0,NC);r++;
+  r++;
+  setCell(ws,0,r,'Combined Portfolio — All Years',SSEC);mergeRange(ws,r,r,0,NC);r++;
+
+  var kl=['Total Accounts','Accts Reduced','Litigation','Arbitration','Total Value Reduced','Total Tax Savings','Years Tracked'];
+  for(var k=0;k<kl.length;k++)setCell(ws,k,r,kl[k],SKLH);r++;
+  var kv=[allRows.length,allReduced,allLit,allArb,allTotalRed>0?fmtMV(allTotalRed):'--',allSavings>0?fmtMV(allSavings):'--',cl.folders.length];
+  for(var k=0;k<kv.length;k++)setCell(ws,k,r,kv[k],(k===4||k===5)?SKVG:SKLV);
+  r++;r++;
+
+  setCell(ws,0,r,'Year-by-Year Breakdown',SSEC);mergeRange(ws,r,r,0,NC);r++;
+  var ybH=['Tax Year','Accounts','Reduced','Litigation','Arbitration','Prior Value Total','Prelim Value Total','Total Value Reduced','Tax Savings'];
+  for(var k=0;k<ybH.length;k++)setCell(ws,k,r,ybH[k],k>1?STBHR:STBH);r++;
+
+  for(var fi=0;fi<cl.folders.length;fi++){
+    var f=cl.folders[fi];var rows=f.rows||[];
+    var red=countReduced(rows);
+    var tred=rows.reduce(function(s,row){var b=parseMV(row.priorVal),fv=parseMV(row.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+    var sav=totMV(rows,'taxSavings');
+    var lit2=rows.filter(function(row){return row.status==='Active Litigation';}).length;
+    var arb2=rows.filter(function(row){return row.status==='Arbitration';}).length;
+    var bgc=fi%2===0?'FFFFFF':'EEF4FB';
+    var bg={fill:{fgColor:{rgb:bgc}},font:{sz:9}};
+    var bgR={fill:{fgColor:{rgb:bgc}},font:{sz:9},alignment:{horizontal:'right'}};
+    var bgG={fill:{fgColor:{rgb:bgc}},font:{color:{rgb:'155724'},bold:true,sz:9},alignment:{horizontal:'right'}};
+    var bgB={fill:{fgColor:{rgb:bgc}},font:{color:{rgb:'002147'},bold:true,sz:10}};
+    setCell(ws,0,r,f.year,bgB);
+    setCell(ws,1,r,rows.length,bgR);setCell(ws,2,r,red,bgR);setCell(ws,3,r,lit2,bgR);setCell(ws,4,r,arb2,bgR);
+    setCell(ws,5,r,totMV(rows,'priorVal')>0?fmtMV(totMV(rows,'priorVal')):'--',bgR);
+    setCell(ws,6,r,totMV(rows,'prelim')>0?fmtMV(totMV(rows,'prelim')):'--',bgR);
+    setCell(ws,7,r,tred>0?fmtMV(tred):'--',bgG);
+    setCell(ws,8,r,sav>0?fmtMV(sav):'--',bgG);
+    r++;
+  }
+  setCell(ws,0,r,'TOTAL',SFOOTL);setCell(ws,1,r,allRows.length,SFOOT);setCell(ws,2,r,allReduced,SFOOT);
+  setCell(ws,3,r,allLit,SFOOT);setCell(ws,4,r,allArb,SFOOT);
+  setCell(ws,5,r,fmtMV(totMV(allRows,'priorVal')),SFOOT);setCell(ws,6,r,fmtMV(totMV(allRows,'prelim')),SFOOT);
+  setCell(ws,7,r,allTotalRed>0?fmtMV(allTotalRed):'--',SFOOTG);
+  setCell(ws,8,r,allSavings>0?fmtMV(allSavings):'--',SFOOTG);
+
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r,c:NC}});
+  ws['!cols']=[{wch:14},{wch:10},{wch:10},{wch:12},{wch:12},{wch:20},{wch:20},{wch:22},{wch:18}];
+  ws['!rows']=[{hpt:28},{hpt:14},{hpt:6},{hpt:30},{hpt:6},{hpt:20}];
+  return ws;
+}
+
+function buildYearSheet(cl,f){
+  var ws={};
+  var rows=f.rows||[];var L=f.labels;
   var reduced=countReduced(rows);
   var totalRed=rows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
   var savings=totMV(rows,'taxSavings');
@@ -666,214 +762,109 @@ function buildLedgerTab(cl,f){
   var arb=rows.filter(function(r){return r.status==='Arbitration';}).length;
   var t24=totMV(rows,'priorVal'),t25=totMV(rows,'prelim');
   var chg=t24>0&&t25>0?((t25-t24)/t24*100).toFixed(1)+'%':'--';
-  var h='<table>';
+  var NC=18;var r=0;
 
-  // ── Year Summary section ──────────────────────────────────────────────────────
-  h+='<tr><td colspan="'+NC+'" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:14pt;font-family:Arial;padding:12px;border-bottom:3px solid #C9A84C;">'+esc(cl.name)+' &mdash; '+f.year+' Tax Year Summary</td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="background:#EEF2F7;color:#666;font-size:8pt;font-family:Arial;padding:5px 12px;">Prepared by Lane Property Tax Advocates &nbsp;|&nbsp; Tax Year '+f.year+' &nbsp;|&nbsp; Confidential</td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="height:10px;background:#fff;"></td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="background:#D4EDDA;color:#155724;font-weight:bold;font-size:18pt;font-family:Arial;text-align:center;padding:16px;border:2px solid #28A745;">'+f.year+' TAX SAVINGS: '+(savings>0?fmtMV(savings):'$0')+'</td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="height:10px;background:#fff;"></td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="background:#002147;color:#fff;font-weight:bold;font-size:10pt;font-family:Arial;padding:7px 12px;border-bottom:2px solid #C9A84C;">'+f.year+' Key Metrics</td></tr>';
+  // Summary header
+  setCell(ws,0,r,cl.name+' — '+f.year+' Tax Year Summary',SNAV);mergeRange(ws,r,r,0,NC);r++;
+  setCell(ws,0,r,'Prepared by Lane Property Tax Advocates | Tax Year '+f.year+' | Confidential',SSUB);mergeRange(ws,r,r,0,NC);r++;
+  r++;
+  setCell(ws,0,r,f.year+' TAX SAVINGS: '+(savings>0?fmtMV(savings):'$0'),SBANNER);mergeRange(ws,r,r,0,NC);r++;
+  r++;
+  setCell(ws,0,r,f.year+' Key Metrics',SSEC);mergeRange(ws,r,r,0,NC);r++;
   var skl=['Total Accounts','Accts Reduced','Litigation','Arbitration','Total Value Reduced','Tax Savings','Portfolio Chg'];
-  h+='<tr>';
-  for(var k=0;k<skl.length;k++)h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:center;padding:5px 8px;border:1px solid #ccc;">'+skl[k]+'</td>';
-  h+='<td colspan="'+(NC-skl.length)+'" style="background:#fff;"></td></tr>';
-  h+='<tr>';
+  for(var k=0;k<skl.length;k++)setCell(ws,k,r,skl[k],SKLH);r++;
   var skv=[rows.length,reduced,lit,arb,totalRed>0?fmtMV(totalRed):'--',savings>0?fmtMV(savings):'--',chg];
-  for(var k=0;k<skv.length;k++){
-    var isH2=(k===4||k===5);
-    h+='<td style="background:'+(isH2?'#D4EDDA':'#F0F6FF')+';color:'+(isH2?'#155724':'#002147')+';font-weight:bold;font-size:13pt;font-family:Arial;text-align:center;padding:10px 8px;border:2px solid '+(isH2?'#28A745':'#ddd')+';">'+skv[k]+'</td>';
-  }
-  h+='<td colspan="'+(NC-skv.length)+'" style="background:#fff;"></td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="height:12px;background:#fff;"></td></tr>';
+  for(var k=0;k<skv.length;k++)setCell(ws,k,r,skv[k],(k===4||k===5)?SKVG:SKLV);
+  r++;r++;
 
-  // County + Top 5 side by side
-  h+='<tr>';
-  h+='<td colspan="4" style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:6px 8px;">Accounts by County</td>';
-  h+='<td style="background:#fff;"></td>';
-  h+='<td colspan="'+(NC-5)+'" style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:6px 8px;">Top 5 Reductions</td>';
-  h+='</tr>';
-  h+='<tr>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;padding:5px 8px;border:1px solid #ccc;">County</td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">Accts</td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">% Portfolio</td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">'+esc(L.prior)+'</td>';
-  h+='<td style="background:#fff;"></td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;padding:5px 8px;border:1px solid #ccc;">Address</td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;padding:5px 8px;border:1px solid #ccc;">Owner</td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">Prior FMV</td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">Final Appr</td>';
-  h+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">$ Reduced</td>';
-  h+='<td colspan="'+(NC-10)+'" style="background:#fff;"></td>';
-  h+='</tr>';
+  // County table
+  setCell(ws,0,r,'Accounts by County',SSEC);mergeRange(ws,r,r,0,3);r++;
+  setCell(ws,0,r,'County',STBH);setCell(ws,1,r,'Accounts',STBHR);setCell(ws,2,r,'% Portfolio',STBHR);setCell(ws,3,r,L.prior,STBHR);r++;
   var CNTS2=['Harris','Brazoria','Montgomery','Fort Bend','Galveston','San Jacinto','Other'];
-  var ctyD=[];
-  for(var ci=0;ci<CNTS2.length;ci++){var co=CNTS2[ci];var cr=rows.filter(function(r){return r.cad===co;});if(cr.length)ctyD.push({county:co,count:cr.length,pct:(cr.length/rows.length*100).toFixed(1),v:totMV(cr,'priorVal')});}
-  var topRed=rows.map(function(r){return{addr:r.address||'',owner:r.owner||'',prior:parseMV(r.priorVal)||0,finalAppr:parseMV(r.finalAppr)||0,red:(parseMV(r.priorVal)||0)-(parseMV(r.finalAppr)||0)};})
-    .filter(function(r){return r.red>0;}).sort(function(a,b){return b.red-a.red;}).slice(0,5);
-  var maxR=Math.max(ctyD.length,topRed.length);
-  for(var ri=0;ri<maxR;ri++){
-    var bg3=ri%2===0?'#FFFFFF':'#EEF4FB';
-    h+='<tr>';
-    if(ri<ctyD.length){var x=ctyD[ri];h+='<td style="background:'+bg3+';font-size:9pt;padding:5px 8px;border:1px solid #eee;">'+x.county+'</td><td style="background:'+bg3+';font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #eee;">'+x.count+'</td><td style="background:'+bg3+';font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #eee;">'+x.pct+'%</td><td style="background:'+bg3+';font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #eee;">'+fmtMV(x.v)+'</td>';}
-    else{h+='<td colspan="4" style="background:'+bg3+';"></td>';}
-    h+='<td style="background:#fff;"></td>';
-    if(ri<topRed.length){var tr3=topRed[ri];h+='<td style="background:#D4EDDA;font-size:9pt;padding:5px 8px;border:1px solid #eee;">'+esc(tr3.addr.substring(0,36))+'</td><td style="background:#D4EDDA;font-size:9pt;padding:5px 8px;border:1px solid #eee;">'+esc(tr3.owner.substring(0,28))+'</td><td style="background:#D4EDDA;font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #eee;">'+fmtMV(tr3.prior)+'</td><td style="background:#D4EDDA;font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #eee;">'+fmtMV(tr3.finalAppr)+'</td><td style="background:#D4EDDA;color:#155724;font-weight:bold;font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #eee;">'+fmtMV(tr3.red)+'</td><td colspan="'+(NC-10)+'" style="background:#D4EDDA;"></td>';}
-    else{h+='<td colspan="'+(NC-5)+'" style="background:'+bg3+';"></td>';}
-    h+='</tr>';
+  for(var ci=0;ci<CNTS2.length;ci++){
+    var co=CNTS2[ci];var cr=rows.filter(function(row){return row.cad===co;});
+    if(!cr.length)continue;
+    var bgc=r%2===0?'FFFFFF':'EEF4FB';
+    var bg={fill:{fgColor:{rgb:bgc}},font:{sz:9}};
+    var bgR={fill:{fgColor:{rgb:bgc}},font:{sz:9},alignment:{horizontal:'right'}};
+    setCell(ws,0,r,co,bg);setCell(ws,1,r,cr.length,bgR);
+    setCell(ws,2,r,(cr.length/rows.length*100).toFixed(1)+'%',bgR);
+    setCell(ws,3,r,totMV(cr,'priorVal')>0?fmtMV(totMV(cr,'priorVal')):'--',bgR);
+    r++;
   }
-  h+='<tr><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;padding:5px 8px;border:1px solid #ccc;">TOTAL</td><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">'+rows.length+'</td><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">100%</td><td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;text-align:right;padding:5px 8px;border:1px solid #ccc;">'+fmtMV(t24)+'</td><td colspan="'+(NC-4)+'" style="background:#fff;"></td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="height:24px;background:#fff;"></td></tr>';
+  setCell(ws,0,r,'TOTAL',SFOOTL);setCell(ws,1,r,rows.length,SFOOT);
+  setCell(ws,2,r,'100%',SFOOT);setCell(ws,3,r,t24>0?fmtMV(t24):'--',SFOOT);
+  r++;r++;
 
-  // ── Ledger section ────────────────────────────────────────────────────────────
-  var ledgerHdrs=['#','CAD','Account #','Address','Property Name','Property Type','Improv Type','CAD Owner/Assessee',
+  // Ledger header
+  setCell(ws,0,r,cl.name+' — '+f.year+' Account Ledger',SNAV);mergeRange(ws,r,r,0,NC);r++;
+  setCell(ws,0,r,'* Auto-calculated | Yellow=Litigation  Blue=Arbitration  Green=Reduced Below Prior Year',SSUB);mergeRange(ws,r,r,0,NC);r++;
+  var lh=['#','CAD','Account #','Address','Property Name','Property Type','Improv Type','CAD Owner/Assessee',
     L.prior,L.prelim,L.prelimAppr||'Prelim Appr Value',L.finalAppr,L.finalMkt,
-    'Market Reduction *','% Change *','Tax Rate','Tax Savings *','Status','Notes'];
-  h+='<tr><td colspan="'+NC+'" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:12pt;font-family:Arial;padding:10px 12px;border-bottom:3px solid #C9A84C;">'+esc(cl.name)+' &mdash; '+f.year+' Account Ledger</td></tr>';
-  h+='<tr><td colspan="'+NC+'" style="background:#EEF2F7;color:#666;font-size:8pt;font-family:Arial;padding:4px 12px;">* Auto-calculated fields &nbsp;|&nbsp; Row colors: Yellow = Litigation, Blue = Arbitration, Green = Reduced Below Prior Year</td></tr>';
-  h+='<tr>';
-  for(var hi=0;hi<ledgerHdrs.length;hi++){h+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;text-align:center;padding:7px 6px;border-bottom:2px solid #C9A84C;white-space:nowrap;">'+esc(ledgerHdrs[hi])+'</td>';}
-  h+='</tr>';
+    'Mkt Reduction *','% Change *','Tax Rate','Tax Savings *','Status','Notes'];
+  for(var k=0;k<lh.length;k++)setCell(ws,k,r,lh[k],k===16?SCOLHDRG:SCOLHDR);r++;
+
   var exportRows=sortedRows(rows);
   for(var ri=0;ri<exportRows.length;ri++){
-    var r=exportRows[ri];
-    var bg4=STATUS_FILLS[r.status]||(ri%2===0?'#FFFFFF':'#EEF4FB');
-    var pv2=parseFloat(r.pctChange)||0;var pctColor=pv2<0?'#155724':pv2>0?'#721c24':'#444';
-    var redAmt=parseMV(r.mktRed)||0;var savAmt=parseMV(r.taxSavings)||0;
-    h+='<tr>';
-    h+='<td style="background:'+bg4+';color:#888;font-size:9pt;text-align:center;padding:5px 6px;border:1px solid #eee;">'+(ri+1)+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.cad||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;mso-number-format:\'@\';">'+String(r.account||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.address||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.propName||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.propType||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.impType||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.owner||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(parseMV(r.priorVal)?fmtMV(parseMV(r.priorVal)):'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(parseMV(r.prelim)?fmtMV(parseMV(r.prelim)):'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(parseMV(r.prelimAppr)?fmtMV(parseMV(r.prelimAppr)):'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(parseMV(r.finalAppr)?fmtMV(parseMV(r.finalAppr)):'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(parseMV(r.finalMkt)?fmtMV(parseMV(r.finalMkt)):'')+'</td>';
-    h+='<td style="background:'+bg4+';color:'+(redAmt>0?'#155724':'#444')+';font-weight:'+(redAmt>0?'bold':'normal')+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(redAmt>0?fmtMV(redAmt):'')+'</td>';
-    h+='<td style="background:'+bg4+';color:'+pctColor+';font-weight:bold;font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(r.pctChange||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(r.taxRate||'')+'</td>';
-    h+='<td style="background:'+bg4+';color:'+(savAmt>0?'#155724':'#444')+';font-weight:'+(savAmt>0?'bold':'normal')+';font-size:9pt;text-align:right;padding:5px 6px;border:1px solid #eee;">'+(savAmt>0?fmtMV(savAmt):'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.status||'')+'</td>';
-    h+='<td style="background:'+bg4+';font-size:9pt;padding:5px 6px;border:1px solid #eee;">'+(r.notes||'')+'</td>';
-    h+='</tr>';
+    var row=exportRows[ri];
+    var redAmt=parseMV(row.mktRed)||0;var savAmt=parseMV(row.taxSavings)||0;
+    var pv2=parseFloat(row.pctChange)||0;
+    var pctSt={fill:rowStyle(row.status,ri).fill,font:{color:{rgb:pv2<0?'155724':pv2>0?'721c24':'444444'},bold:true,sz:9},alignment:{horizontal:'right'}};
+    setCell(ws,0,r,ri+1,{fill:rowStyle(row.status,ri).fill,font:{color:{rgb:'888888'},sz:9},alignment:{horizontal:'center'}});
+    setCell(ws,1,r,row.cad||'',rowStyle(row.status,ri));
+    setCell(ws,2,r,String(row.account||''),rowStyle(row.status,ri));
+    setCell(ws,3,r,row.address||'',rowStyle(row.status,ri));
+    setCell(ws,4,r,row.propName||'',rowStyle(row.status,ri));
+    setCell(ws,5,r,row.propType||'',rowStyle(row.status,ri));
+    setCell(ws,6,r,row.impType||'',rowStyle(row.status,ri));
+    setCell(ws,7,r,row.owner||'',rowStyle(row.status,ri));
+    setCell(ws,8,r,parseMV(row.priorVal)?fmtMV(parseMV(row.priorVal)):'',rowStyle(row.status,ri,true));
+    setCell(ws,9,r,parseMV(row.prelim)?fmtMV(parseMV(row.prelim)):'',rowStyle(row.status,ri,true));
+    setCell(ws,10,r,parseMV(row.prelimAppr)?fmtMV(parseMV(row.prelimAppr)):'',rowStyle(row.status,ri,true));
+    setCell(ws,11,r,parseMV(row.finalAppr)?fmtMV(parseMV(row.finalAppr)):'',rowStyle(row.status,ri,true));
+    setCell(ws,12,r,parseMV(row.finalMkt)?fmtMV(parseMV(row.finalMkt)):'',rowStyle(row.status,ri,true));
+    setCell(ws,13,r,redAmt>0?fmtMV(redAmt):'',redAmt>0?rowStyle(row.status,ri,true,true):rowStyle(row.status,ri,true));
+    setCell(ws,14,r,row.pctChange||'',pctSt);
+    setCell(ws,15,r,row.taxRate||'',rowStyle(row.status,ri,true));
+    setCell(ws,16,r,savAmt>0?fmtMV(savAmt):'',savAmt>0?rowStyle(row.status,ri,true,true):rowStyle(row.status,ri,true));
+    setCell(ws,17,r,row.status||'',rowStyle(row.status,ri));
+    setCell(ws,18,r,row.notes||'',rowStyle(row.status,ri));
+    r++;
   }
-  // Ledger totals row
-  h+='<tr>';
-  h+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:7px 6px;">TOTALS</td>';
-  h+='<td style="background:#002147;padding:7px 6px;"></td>';
-  h+='<td style="background:#002147;color:#fff;font-size:9pt;text-align:right;padding:7px 6px;">'+exportRows.length+' accounts</td>';
-  for(var ti=0;ti<5;ti++)h+='<td style="background:#002147;padding:7px 6px;"></td>';
+  // Totals
+  setCell(ws,0,r,'TOTALS',SFOOTL);setCell(ws,1,r,'',SFOOT);setCell(ws,2,r,exportRows.length+' accounts',SFOOT);
+  for(var k=3;k<8;k++)setCell(ws,k,r,'',SFOOT);
   var totFs=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','mktRed'];
-  for(var ti=0;ti<totFs.length;ti++){var t=totMV(rows,totFs[ti]);h+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:7px 6px;">'+(t>0?fmtMV(t):'')+'</td>';}
-  h+='<td style="background:#002147;padding:7px 6px;"></td>';
-  h+='<td style="background:#002147;padding:7px 6px;"></td>';
-  var ts2=totMV(rows,'taxSavings');
-  h+='<td style="background:#002147;color:#a8d5b5;font-weight:bold;font-size:9pt;text-align:right;padding:7px 6px;">'+(ts2>0?fmtMV(ts2):'')+'</td>';
-  h+='<td style="background:#002147;padding:7px 6px;"></td>';
-  h+='<td style="background:#002147;padding:7px 6px;"></td>';
-  h+='</tr>';
-  h+='</table><br/><br/>';
-  return h;
+  for(var ti=0;ti<totFs.length;ti++){var t=totMV(rows,totFs[ti]);setCell(ws,8+ti,r,t>0?fmtMV(t):'',SFOOT);}
+  setCell(ws,14,r,'',SFOOT);setCell(ws,15,r,'',SFOOT);
+  setCell(ws,16,r,totMV(rows,'taxSavings')>0?fmtMV(totMV(rows,'taxSavings')):'',SFOOTG);
+  setCell(ws,17,r,'',SFOOT);setCell(ws,18,r,'',SFOOT);
+
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r,c:NC}});
+  ws['!cols']=[{wch:5},{wch:11},{wch:16},{wch:24},{wch:18},{wch:14},{wch:16},{wch:24},{wch:16},{wch:16},{wch:16},{wch:14},{wch:14},{wch:16},{wch:10},{wch:9},{wch:14},{wch:20},{wch:18}];
+  return ws;
 }
 
 function exportExcel(){
   var cl=getClient(activeClientId);
   if(!cl||!cl.folders||!cl.folders.length){alert('Please select a client with data.');return;}
 
-  // ── Tab registration (Tab1 = Executive Summary, then one per year) ───────────
-  var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-  html+='<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>';
-  html+='<x:ExcelWorksheet><x:Name>Executive Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
-  for(var i=0;i<cl.folders.length;i++){
-    html+='<x:ExcelWorksheet><x:Name>'+cl.folders[i].year+' Ledger</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
-  }
-  html+='</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>';
+  var wb=XLSX.utils.book_new();
 
-  // ── TAB 1: Executive Summary — all years combined, NO individual ledgers ──────
-  var allRows=[];
-  for(var fi=0;fi<cl.folders.length;fi++){allRows=allRows.concat(cl.folders[fi].rows||[]);}
-  var allReduced=countReduced(allRows);
-  var allTotalRed=allRows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
-  var allSavings=totMV(allRows,'taxSavings');
-  var allLit=allRows.filter(function(r){return r.status==='Active Litigation';}).length;
-  var allArb=allRows.filter(function(r){return r.status==='Arbitration';}).length;
+  // Tab 1: Executive Summary
+  var execSheet=buildExecSheet(cl);
+  XLSX.utils.book_append_sheet(wb,execSheet,'Executive Summary');
 
-  // Each worksheet must be wrapped in a div with the ss:Name attribute for proper tab separation
-  html+='<table>';
-  html+='<tr><td colspan="9" style="background:#002147;color:#C9A84C;font-weight:bold;font-size:16pt;font-family:Arial;padding:14px 12px;border-bottom:4px solid #C9A84C;">'+esc(cl.name)+' &mdash; Property Tax Executive Summary</td></tr>';
-  html+='<tr><td colspan="9" style="background:#EEF2F7;color:#666;font-size:8pt;font-family:Arial;padding:5px 12px;">Prepared by Lane Property Tax Advocates &nbsp;|&nbsp; Confidential &nbsp;|&nbsp; All values reflect certified appraisal data</td></tr>';
-  html+='<tr><td colspan="9" style="height:12px;background:#fff;"></td></tr>';
-  html+='<tr><td colspan="9" style="background:#D4EDDA;color:#155724;font-weight:bold;font-size:22pt;font-family:Arial;text-align:center;padding:18px;border:3px solid #28A745;">TOTAL TAX SAVINGS &mdash; ALL YEARS: '+(allSavings>0?fmtMV(allSavings):'$0')+'</td></tr>';
-  html+='<tr><td colspan="9" style="height:14px;background:#fff;"></td></tr>';
-  html+='<tr><td colspan="9" style="background:#002147;color:#fff;font-weight:bold;font-size:11pt;font-family:Arial;padding:7px 12px;border-bottom:2px solid #C9A84C;">Combined Portfolio &mdash; All Years</td></tr>';
-  var kl=['Total Accounts','Accts Reduced','Litigation','Arbitration','Total Value Reduced','Total Tax Savings','Years Tracked'];
-  html+='<tr>';
-  for(var k=0;k<kl.length;k++)html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:8pt;font-family:Arial;text-align:center;padding:5px 8px;border:1px solid #ccc;">'+kl[k]+'</td>';
-  html+='<td colspan="2" style="background:#fff;"></td></tr>';
-  html+='<tr>';
-  var kv=[allRows.length,allReduced,allLit,allArb,allTotalRed>0?fmtMV(allTotalRed):'--',allSavings>0?fmtMV(allSavings):'--',cl.folders.length];
-  for(var k=0;k<kv.length;k++){
-    var isH=(k===4||k===5);
-    html+='<td style="background:'+(isH?'#D4EDDA':'#F0F6FF')+';color:'+(isH?'#155724':'#002147')+';font-weight:bold;font-size:14pt;font-family:Arial;text-align:center;padding:10px 8px;border:2px solid '+(isH?'#28A745':'#ddd')+';">'+kv[k]+'</td>';
-  }
-  html+='<td colspan="2" style="background:#fff;"></td></tr>';
-  html+='<tr><td colspan="9" style="height:16px;background:#fff;"></td></tr>';
-  html+='<tr><td colspan="9" style="background:#002147;color:#fff;font-weight:bold;font-size:10pt;font-family:Arial;padding:7px 12px;border-bottom:2px solid #C9A84C;">Year-by-Year Breakdown</td></tr>';
-  var ybH=['Tax Year','Accounts','Reduced','Litigation','Arbitration','Prior Value Total','Prelim Value Total','Total Value Reduced','Tax Savings'];
-  html+='<tr>';
-  for(var h2=0;h2<ybH.length;h2++)html+='<td style="background:#DCE8F4;color:#002147;font-weight:bold;font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #ccc;text-align:'+(h2>1?'right':'left')+';">'+ybH[h2]+'</td>';
-  html+='</tr>';
+  // One tab per year: summary + ledger
   for(var fi=0;fi<cl.folders.length;fi++){
-    var f=cl.folders[fi];var rows=f.rows||[];
-    var red=countReduced(rows);
-    var tred=rows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
-    var sav=totMV(rows,'taxSavings');
-    var lit2=rows.filter(function(r){return r.status==='Active Litigation';}).length;
-    var arb2=rows.filter(function(r){return r.status==='Arbitration';}).length;
-    var bg2=fi%2===0?'#FFFFFF':'#EEF4FB';
-    html+='<tr>';
-    html+='<td style="background:'+bg2+';font-weight:bold;font-size:10pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;color:#002147;">'+f.year+'</td>';
-    html+='<td style="background:'+bg2+';font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+rows.length+'</td>';
-    html+='<td style="background:'+bg2+';font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+red+'</td>';
-    html+='<td style="background:'+bg2+';font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+lit2+'</td>';
-    html+='<td style="background:'+bg2+';font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+arb2+'</td>';
-    html+='<td style="background:'+bg2+';font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+fmtMV(totMV(rows,'priorVal'))+'</td>';
-    html+='<td style="background:'+bg2+';font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+fmtMV(totMV(rows,'prelim'))+'</td>';
-    html+='<td style="background:'+bg2+';color:#155724;font-weight:bold;font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+(tred>0?fmtMV(tred):'--')+'</td>';
-    html+='<td style="background:'+bg2+';color:#155724;font-weight:bold;font-size:9pt;font-family:Arial;padding:6px 8px;border:1px solid #eee;text-align:right;">'+(sav>0?fmtMV(sav):'--')+'</td>';
-    html+='</tr>';
-  }
-  html+='<tr>';
-  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;font-family:Arial;padding:6px 8px;">TOTAL</td>';
-  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+allRows.length+'</td>';
-  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+allReduced+'</td>';
-  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+allLit+'</td>';
-  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+allArb+'</td>';
-  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+fmtMV(totMV(allRows,'priorVal'))+'</td>';
-  html+='<td style="background:#002147;color:#fff;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+fmtMV(totMV(allRows,'prelim'))+'</td>';
-  html+='<td style="background:#002147;color:#a8d5b5;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+(allTotalRed>0?fmtMV(allTotalRed):'--')+'</td>';
-  html+='<td style="background:#002147;color:#a8d5b5;font-weight:bold;font-size:9pt;text-align:right;padding:6px 8px;">'+(allSavings>0?fmtMV(allSavings):'--')+'</td>';
-  html+='</tr></table>';
-
-  // ── ONE TAB PER YEAR: each has its own summary + ledger ───────────────────────
-  for(var fi=0;fi<cl.folders.length;fi++){
-    html+='<!--[if gte mso 9]><br style="page-break-before:always;mso-break-type:section-break"/><![endif]-->';
-    html+=buildLedgerTab(cl,cl.folders[fi]);
+    var yearSheet=buildYearSheet(cl,cl.folders[fi]);
+    XLSX.utils.book_append_sheet(wb,yearSheet,cl.folders[fi].year+' Ledger');
   }
 
-  html+='</body></html>';
-
-  var blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');a.href=url;a.download=cl.name+' - Property Tax Report.xls';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  XLSX.writeFile(wb,cl.name+' - Property Tax Report.xlsx');
 }
+
+
 
 // ── KPIs ───────────────────────────────────────────────────────────────────────
 function isReduced(r){
