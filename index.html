@@ -767,7 +767,7 @@ function renderSidebar(){
           +'<span style="font-size:9px;opacity:.4;margin-left:2px">'+(f.rows?f.rows.length:0)+'</span>'
           +(canEdit()?'<button class="sb-del" onclick="event.stopPropagation();delFolder(\''+c.id+'\',\''+f.id+'\')" title="Delete">&#215;</button>':'')+'</div>';
       }
-      html+='<div class="sb-add-folder" onclick="openNewFolderModal(\''+c.id+'\')})">&#43; add year / folder</div>';
+      html+='<div class="sb-add-folder" onclick="openNewFolderModal(\''+c.id+'\')">&#43; add year / folder</div>';
     }
   }
   el.innerHTML=html;
@@ -2100,7 +2100,7 @@ function renderClientOverview(cl){
 
   // Add year button
   h+='<div style="margin-top:16px">';
-  h+='<button class="btn btn-navy btn-sm" onclick="openNewFolderModal(\''+cl.id+'\')})">+ Add Year / Folder</button>';
+  h+='<button class="btn btn-navy btn-sm" onclick="openNewFolderModal(\''+cl.id+'\')">+ Add Year / Folder</button>';
   h+='</div>';
 
   h+='</div>';
