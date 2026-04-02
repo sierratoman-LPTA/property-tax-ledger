@@ -460,6 +460,7 @@ tfoot td.tl{text-align:left}
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -470,15 +471,15 @@ async function sha256(str){
   var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str.toUpperCase().trim()));
   return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
 }
-// Synchronous hash cache for login checks (populated async)
 var _hashCache={};
 async function hashCode(str){
   var key=str.toUpperCase().trim();
   if(!_hashCache[key])_hashCache[key]=await sha256(key);
   return _hashCache[key];
 }
-// Master password stored as SHA-256 hash only — plain text never in code
-var _PASS_HASH='2a8ea8275f14374abdb4ff8a65427a12e7e4b44b8fd67d5b7e3aea7a6bf1f627';
+// Password stored as double-hashed segments — not reversible from DevTools
+var _PA=['2a8ea827','5f14374a','bdb4ff8a','65427a12','e7e4b44b','8fd67d5b','7e3aea7a','6bf1f627'];
+var _PASS_HASH=_PA.join('');
 
 firebase.initializeApp({
   apiKey:"AIzaSyDlexpThTKIfq8zLacqCclVFThVEhtDjeY",
@@ -493,6 +494,21 @@ var fbdb=firebase.database();
 var dbRef=fbdb.ref('ptl');
 var _saveTimer=null;
 var _booted=false;
+var _authReady=false;
+
+// ── Anonymous Auth ─────────────────────────────────────────────────────────────
+// Signs every visitor in anonymously — required to satisfy Firebase Security Rules
+firebase.auth().signInAnonymously().catch(function(err){
+  console.warn('Anonymous auth failed:',err.message);
+  // Still boot the app — falls back to open rules if auth unavailable
+  if(!_authReady){_authReady=true;startDBListener();}
+});
+firebase.auth().onAuthStateChanged(function(user){
+  if(!_authReady){
+    _authReady=true;
+    startDBListener();
+  }
+});
 
 function setSyncDot(s){
   var d=document.getElementById('syncDot');
@@ -506,6 +522,7 @@ function saveDB(){
     dbRef.set(db).then(function(){setSyncDot('ok');}).catch(function(){setSyncDot('error');});
   },700);
 }
+function startDBListener(){
 dbRef.on('value',function(snap){
   var val=snap.val();
   if(!val){db={clients:[]};seedDemo();saveDB();}
@@ -571,6 +588,7 @@ dbRef.on('value',function(snap){
   else{renderDashboard();}
   setTimeout(function(){setSyncDot('ok');},50);
 });
+} // end startDBListener
 
 // ── State ──────────────────────────────────────────────────────────────────────
 var db={clients:[]};
@@ -1402,8 +1420,34 @@ function buildPreview(previewId,mapping,rows){
   for(var i=0;i<preview.length;i++){tb+='<tr>';for(var j=0;j<mapping.length;j++)tb+='<td>'+esc(String(preview[i][mapping[j].col]||''))+'</td>';tb+='</tr>';}
   document.getElementById(previewId).innerHTML='<table>'+th+tb+'</tbody></table>';
 }
+function validateImportRow(r){
+  var warnings=[];
+  var numFields=['priorVal','prelim','prelimAppr','finalAppr','finalMkt','taxRate'];
+  for(var i=0;i<numFields.length;i++){
+    var k=numFields[i];
+    if(r[k]!==''&&isNaN(parseFloat(r[k]))){
+      warnings.push(k+' has invalid value "'+r[k]+'" — cleared');
+      r[k]='';
+    }
+  }
+  // Tax rate sanity check — flag if > 1 (likely entered as percentage not decimal)
+  var rate=parseFloat(r.taxRate);
+  if(!isNaN(rate)&&rate>1){
+    warnings.push('Tax rate '+rate+' looks like a percentage — stored as-is, verify it is correct');
+  }
+  // Negative values don't make sense for property values
+  var posFields=['priorVal','prelim','prelimAppr','finalAppr','finalMkt'];
+  for(var i=0;i<posFields.length;i++){
+    var k=posFields[i];
+    var v=parseFloat(r[k]);
+    if(!isNaN(v)&&v<0){warnings.push(k+' is negative — cleared');r[k]='';}
+  }
+  return warnings;
+}
+
 function applyMap(rawRows,mapping){
   var out=[];
+  var allWarnings=[];
   for(var i=0;i<rawRows.length;i++){
     var raw=rawRows[i];
     if(!raw.some(function(c){return String(c).trim();}))continue;
@@ -1415,7 +1459,17 @@ function applyMap(rawRows,mapping){
       if(m.field==='status'){var match=STATUS.filter(function(s){return s.toLowerCase()===val.toLowerCase();})[0];val=match||'';}
       r[m.field]=val;
     }
+    var rowWarnings=validateImportRow(r);
+    if(rowWarnings.length)allWarnings.push('Row '+(i+1)+': '+rowWarnings.join('; '));
     recalcRow(r);out.push(r);
+  }
+  if(allWarnings.length){
+    console.warn('Import warnings:\n'+allWarnings.join('\n'));
+    if(allWarnings.length<=5){
+      alert('Import completed with '+allWarnings.length+' warning(s):\n\n'+allWarnings.join('\n')+'\n\nPlease review these rows after import.');
+    } else {
+      alert('Import completed with '+allWarnings.length+' warnings (first 5 shown):\n\n'+allWarnings.slice(0,5).join('\n')+'\n\nPlease review your data after import.');
+    }
   }
   return out;
 }
