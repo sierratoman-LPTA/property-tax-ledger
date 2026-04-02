@@ -18,7 +18,7 @@ jobs:
       - name: Fetch Firebase data
         run: |
           mkdir -p backups
-          curl -f -s "https://propertytaxledger-default-rtdb.firebaseio.com/ptl.json" \
+          curl -f -s "https://propertytaxledger-default-rtdb.firebaseio.com/ptl.json?auth=${{ secrets.FIREBASE_SECRET }}" \
             -o "backups/ptl-backup-$(date +'%Y-%m-%d_%H-%M-%S').json"
 
       - name: Commit and push backup
