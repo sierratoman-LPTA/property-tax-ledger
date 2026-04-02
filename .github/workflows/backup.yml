@@ -1,0 +1,27 @@
+name: Daily Firebase Backup
+
+on:
+  schedule:
+    - cron: '0 14 * * *'  # Runs every day at 9am Central Time
+  workflow_dispatch:        # Allows manual run from GitHub
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Fetch Firebase data
+        run: |
+          curl -s "https://propertytaxledger-default-rtdb.firebaseio.com/ptl.json" \
+            -o "backups/ptl-backup-$(date +'%Y-%m-%d_%H-%M-%S').json"
+
+      - name: Commit backup
+        run: |
+          git config user.name "PTL Backup Bot"
+          git config user.email "backup@lane-pta.com"
+          git add backups/
+          git diff --staged --quiet || git commit -m "Auto backup $(date +'%Y-%m-%d')"
+          git push
