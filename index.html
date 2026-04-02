@@ -82,7 +82,7 @@ tbody tr.completed{}
 tbody td{padding:3px 5px;vertical-align:middle}
 tbody td input,tbody td select{border:none;background:transparent;font-size:11.5px;font-family:Arial,sans-serif;color:#222;width:100%;padding:2px 3px;outline:none}
 tbody td input:focus,tbody td select:focus{background:#fffbe6;border-radius:3px}
-.num-cell{text-align:center;color:#aaa;font-size:10px;min-width:40px}
+.num-cell{text-align:center;color:#aaa;font-size:10px;min-width:52px;white-space:nowrap}
 .calc-cell{background:rgba(0,33,71,0.03)!important}
 tfoot td{background:var(--navy);color:#fff;font-weight:700;padding:7px 7px;font-size:11.5px;text-align:right;white-space:nowrap}
 tfoot td.tl{text-align:left}
@@ -2270,7 +2270,7 @@ function renderKPIs(){
 // ── Fields ─────────────────────────────────────────────────────────────────────
 function getFields(labels){
   var base=[
-    {k:'_rownum',label:'#',w:40,mv:false,auto:true},
+    {k:'_rownum',label:'#',w:52,mv:false,auto:true},
     {k:'cad',label:'CAD',w:95,mv:false},
     {k:'account',label:'Account #',w:125,mv:false},
     {k:'address',label:'Address',w:175,mv:false},
