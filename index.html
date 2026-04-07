@@ -1997,20 +1997,28 @@ function buildExecSummaryHtml(cl, folders){
   return h;
 }
 
+function togglePdfLedgers(e){
+  e.stopPropagation();
+  var cb=document.getElementById('pdfIncludeLedgers');
+  if(cb)cb.checked=!cb.checked;
+}
 function exportPDF(mode){
   closePdfMenu();
+  var includeLedgers=document.getElementById('pdfIncludeLedgers');
+  var withLedgers=includeLedgers?includeLedgers.checked:true;
   var cl=getClient(activeClientId);
   if(!cl||!cl.folders||!cl.folders.length){alert('Please select a client first.');return;}
   if(mode==='year'){
     var af=getActiveFolder();
     if(!af){alert('Please open a specific year folder first to export the current year summary.');return;}
-    buildJsPDF(cl,[af],'Current Year Summary — '+af.year);
+    buildJsPDF(cl,[af],'Current Year Summary — '+af.year,withLedgers);
   } else {
-    buildJsPDF(cl,cl.folders||[],'All Years Summary');
+    buildJsPDF(cl,cl.folders||[],'All Years Summary',withLedgers);
   }
 }
 
-function buildJsPDF(cl,folders,reportTitle){
+function buildJsPDF(cl,folders,reportTitle,withLedgers){
+  if(withLedgers===undefined)withLedgers=true;
   var doc=new jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'letter'});
   var pageW=doc.internal.pageSize.getWidth();
   var pageH=doc.internal.pageSize.getHeight();
@@ -2171,42 +2179,153 @@ function buildJsPDF(cl,folders,reportTitle){
   });
   y=doc.lastAutoTable.finalY+14;
 
-  // Per-year account ledger pages
-  for(var fi=0;fi<folders.length;fi++){
-    var f=folders[fi];var rows=f.rows||[];
-    if(rows.length===0)continue;
-    doc.addPage();addPageHeader(cl.name+' — '+f.year+' Account Ledger');
-    var STATUS_COLORS={'Active Litigation':[255,243,205],'Arbitration':[204,229,255],'Reduced Below Last Year':[212,237,218],'Awaiting Formal':[234,213,245]};
-    var lhead=[['#','CAD','Account #','Address','Owner','Prior Value','Prelim Value','Final Mkt','Final Appr','Reduction','% Chg','Savings','Status']];
-    var lbody=rows.map(function(r,i){return[
-      String(i+1),r.cad||'',r.account||'',
-      (r.address||'').substring(0,26),(r.owner||'').substring(0,20),
-      parseMV(r.priorVal)?fmtMV(r.priorVal):'',parseMV(r.prelim)?fmtMV(r.prelim):'',
-      parseMV(r.finalMkt)?fmtMV(r.finalMkt):'',parseMV(r.finalAppr)?fmtMV(r.finalAppr):'',
-      parseMV(r.mktRed)>0?fmtMV(r.mktRed):'',r.pctChange||'',
-      parseMV(r.taxSavings)>0?fmtMV(r.taxSavings):'',
-      (r.status===''||r.status==='None')?'':r.status,
-    ];});
-    doc.autoTable({startY:50,head:lhead,body:lbody,margin:{left:margin,right:margin},
-      headStyles:{fillColor:navy,textColor:white,fontSize:6.5,fontStyle:'bold'},
-      bodyStyles:{fontSize:6},
-      columnStyles:{0:{cellWidth:22,halign:'center'},1:{cellWidth:52},2:{cellWidth:72},3:{cellWidth:70},4:{cellWidth:60},
-        5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'},
-        9:{halign:'right',textColor:green,fontStyle:'bold'},10:{halign:'right'},
-        11:{halign:'right',textColor:green,fontStyle:'bold'},12:{cellWidth:48}},
-      didParseCell:function(d){if(d.section==='body'){var st=rows[d.row.index]?rows[d.row.index].status:'';var col=STATUS_COLORS[st];if(col)d.cell.styles.fillColor=col;}},
-      didDrawPage:function(){addPageHeader(cl.name+' — '+f.year+' Account Ledger');}
-    });
-    var ty=doc.lastAutoTable.finalY;
-    doc.setFillColor(navy[0],navy[1],navy[2]);doc.rect(margin,ty,pageW-margin*2,18,'F');
-    doc.setTextColor(white[0],white[1],white[2]);doc.setFont('helvetica','bold');doc.setFontSize(8);
-    doc.text('TOTALS — '+rows.length+' accounts',margin+6,ty+12);
-    var sav=totMV(rows,'taxSavings');
-    if(sav>0){doc.setTextColor(gold[0],gold[1],gold[2]);doc.text(fmtMV(sav)+' Tax Savings',pageW-margin-6,ty+12,{align:'right'});}
+  // ── Table of Contents (inserted on page 1 if space, else new page) ────────────
+  var tocFolders=withLedgers?folders.filter(function(f){return(f.rows||[]).length>0;}):[];
+  if(y<pageH-80){
+    doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(navy[0],navy[1],navy[2]);
+    doc.text('CONTENTS',margin,y+11);y+=16;
+  } else {
+    doc.addPage();addPageHeader(headerTitle);y=52;
+    doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(navy[0],navy[1],navy[2]);
+    doc.text('CONTENTS',margin,y+11);y+=16;
+  }
+  // We'll build a placeholder TOC now and fill page numbers after rendering
+  var tocStartY=y;
+  var tocLines=[];
+  tocLines.push({label:'Executive Summary',page:1});
+  if(withLedgers){
+    for(var ti=0;ti<tocFolders.length;ti++){
+      tocLines.push({label:tocFolders[ti].year+' Account Ledger ('+tocFolders[ti].rows.length+' accounts)',page:'—'});
+    }
+  }
+  // Draw TOC placeholder rows
+  for(var ti=0;ti<tocLines.length;ti++){
+    var tl=tocLines[ti];var ty2=y+ti*14;
+    var isExec=ti===0;
+    doc.setFillColor(isExec?navy[0]:248,isExec?navy[1]:249,isExec?navy[2]:251);
+    doc.rect(margin,ty2-9,pageW-margin*2,13,'F');
+    doc.setFont('helvetica',isExec?'bold':'normal');doc.setFontSize(8);
+    doc.setTextColor(isExec?white[0]:navy[0],isExec?white[1]:navy[1],isExec?white[2]:navy[2]);
+    doc.text(tl.label,margin+8,ty2);
+    doc.text('p. '+tl.page,pageW-margin-8,ty2,{align:'right'});
+  }
+  y+=tocLines.length*14+10;
+
+  // ── Per-year account ledger pages ────────────────────────────────────────────
+  var ledgerStartPages={};
+  if(withLedgers){
+    for(var fi=0;fi<folders.length;fi++){
+      var f=folders[fi];var rows=f.rows||[];
+      if(rows.length===0)continue;
+
+      // ── Divider page ──
+      doc.addPage();
+      var divPage=doc.internal.getCurrentPageInfo().pageNumber;
+      ledgerStartPages[f.year]=divPage;
+      doc.setFillColor(navy[0],navy[1],navy[2]);
+      doc.rect(0,0,pageW,pageH,'F');
+      doc.setFillColor(gold[0],gold[1],gold[2]);
+      doc.rect(0,pageH/2-2,pageW,4,'F');
+      doc.setTextColor(gold[0],gold[1],gold[2]);
+      doc.setFont('helvetica','bold');doc.setFontSize(28);
+      doc.text(f.year,pageW/2,pageH/2-20,{align:'center'});
+      doc.setFontSize(12);doc.setTextColor(white[0],white[1],white[2]);
+      doc.text('ACCOUNT LEDGER',pageW/2,pageH/2+18,{align:'center'});
+      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(255,255,255);
+      doc.text(esc(cl.name),pageW/2,pageH/2+34,{align:'center'});
+
+      // ── Mini year summary ──
+      doc.addPage();addPageHeader(cl.name+' — '+f.year+' Account Ledger');
+      var fSav=totMV(rows,'taxSavings');
+      var fMktRed2=totMV(rows,'mktRed');
+      var fLit2=rows.filter(function(r){return r.status==='Active Litigation';}).length;
+      var fArb2=rows.filter(function(r){return r.status==='Arbitration';}).length;
+      var fReduced2=rows.filter(function(r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return b&&fv&&fv<b;}).length;
+      // Savings banner
+      if(fSav>0){
+        doc.setFillColor(lightGreen[0],lightGreen[1],lightGreen[2]);
+        doc.setDrawColor(40,167,69);
+        doc.roundedRect(margin,52,pageW-margin*2,32,3,3,'FD');
+        doc.setTextColor(green[0],green[1],green[2]);
+        doc.setFont('helvetica','bold');doc.setFontSize(8);
+        doc.text(f.year+' TAX SAVINGS',pageW/2,64,{align:'center'});
+        doc.setFontSize(16);doc.text(fmtMV(fSav),pageW/2,78,{align:'center'});
+      }
+      // Mini KPI strip
+      var mKpis=[
+        {l:'Accounts',v:String(rows.length)},
+        {l:'Reduced',v:String(fReduced2)},
+        {l:'Litigation',v:String(fLit2)},
+        {l:'Arbitration',v:String(fArb2)},
+        {l:'Mkt Val Reduced',v:fMktRed2>0?fmtMV(fMktRed2):'—'},
+        {l:'Tax Savings',v:fSav>0?fmtMV(fSav):'—'},
+      ];
+      var mkw=(pageW-margin*2)/mKpis.length;var mky=fSav>0?94:56;
+      for(var ki=0;ki<mKpis.length;ki++){
+        var kx2=margin+ki*mkw;var isGreen2=(ki===4||ki===5);
+        doc.setFillColor(isGreen2?lightGreen[0]:248,isGreen2?lightGreen[1]:249,isGreen2?lightGreen[2]:251);
+        doc.setDrawColor(isGreen2?40:220,isGreen2?167:224,isGreen2?69:230);
+        doc.rect(kx2,mky,mkw,32,'FD');
+        doc.setTextColor(isGreen2?green[0]:navy[0],isGreen2?green[1]:navy[1],isGreen2?green[2]:navy[2]);
+        doc.setFont('helvetica','bold');doc.setFontSize(10);
+        doc.text(mKpis[ki].v,kx2+mkw/2,mky+16,{align:'center'});
+        doc.setFont('helvetica','normal');doc.setFontSize(6);doc.setTextColor(120,120,120);
+        doc.text(mKpis[ki].l.toUpperCase(),kx2+mkw/2,mky+26,{align:'center'});
+      }
+
+      // ── Account ledger table ──
+      var STATUS_COLORS={'Active Litigation':[255,243,205],'Arbitration':[204,229,255],'Reduced Below Last Year':[212,237,218],'Awaiting Formal':[234,213,245]};
+      var lhead=[['#','CAD','Account #','Address','Owner','Prior Value','Prelim Value','Final Mkt','Final Appr','Reduction','% Chg','Savings','Status']];
+      var lbody=rows.map(function(r,i){return[
+        String(i+1),r.cad||'',r.account||'',
+        (r.address||'').substring(0,26),(r.owner||'').substring(0,20),
+        parseMV(r.priorVal)?fmtMV(r.priorVal):'',parseMV(r.prelim)?fmtMV(r.prelim):'',
+        parseMV(r.finalMkt)?fmtMV(r.finalMkt):'',parseMV(r.finalAppr)?fmtMV(r.finalAppr):'',
+        parseMV(r.mktRed)>0?fmtMV(r.mktRed):'',r.pctChange||'',
+        parseMV(r.taxSavings)>0?fmtMV(r.taxSavings):'',
+        (r.status===''||r.status==='None')?'':r.status,
+      ];});
+      var ledgerStartY=mky+42;
+      doc.autoTable({startY:ledgerStartY,head:lhead,body:lbody,margin:{left:margin,right:margin},
+        headStyles:{fillColor:navy,textColor:white,fontSize:6.5,fontStyle:'bold'},
+        bodyStyles:{fontSize:6},
+        columnStyles:{0:{cellWidth:22,halign:'center'},1:{cellWidth:52},2:{cellWidth:72},3:{cellWidth:70},4:{cellWidth:60},
+          5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'},
+          9:{halign:'right',textColor:green,fontStyle:'bold'},10:{halign:'right'},
+          11:{halign:'right',textColor:green,fontStyle:'bold'},12:{cellWidth:48}},
+        didParseCell:function(d){if(d.section==='body'){var st=rows[d.row.index]?rows[d.row.index].status:'';var col=STATUS_COLORS[st];if(col)d.cell.styles.fillColor=col;}},
+        didDrawPage:function(){addPageHeader(cl.name+' — '+f.year+' Account Ledger');}
+      });
+      var ty=doc.lastAutoTable.finalY;
+      doc.setFillColor(navy[0],navy[1],navy[2]);doc.rect(margin,ty,pageW-margin*2,18,'F');
+      doc.setTextColor(white[0],white[1],white[2]);doc.setFont('helvetica','bold');doc.setFontSize(8);
+      doc.text('TOTALS — '+rows.length+' accounts',margin+6,ty+12);
+      if(fSav>0){doc.setTextColor(gold[0],gold[1],gold[2]);doc.text(fmtMV(fSav)+' Tax Savings',pageW-margin-6,ty+12,{align:'right'});}
+    }
   }
 
+  // ── Finalize: add footers and update TOC page numbers ────────────────────────
   var totalPages=doc.internal.getNumberOfPages();
   for(var p=1;p<=totalPages;p++){doc.setPage(p);addPageFooter(p,totalPages);}
+
+  // Go back and redraw TOC with real page numbers
+  doc.setPage(1);
+  for(var ti=0;ti<tocLines.length;ti++){
+    var tl=tocLines[ti];
+    if(tl.label!=='Executive Summary'&&withLedgers){
+      var yr3=tl.label.split(' ')[0];
+      if(ledgerStartPages[yr3])tl.page=ledgerStartPages[yr3];
+    }
+    var ty3=tocStartY+ti*14;
+    var isExec2=ti===0;
+    doc.setFillColor(isExec2?navy[0]:248,isExec2?navy[1]:249,isExec2?navy[2]:251);
+    doc.rect(margin,ty3-9,pageW-margin*2,13,'F');
+    doc.setFont('helvetica',isExec2?'bold':'normal');doc.setFontSize(8);
+    doc.setTextColor(isExec2?white[0]:navy[0],isExec2?white[1]:navy[1],isExec2?white[2]:navy[2]);
+    doc.text(tl.label,margin+8,ty3);
+    doc.text('p. '+tl.page,pageW-margin-8,ty3,{align:'right'});
+  }
+
   doc.save(cl.name+' — '+(reportTitle||'Property Tax Report')+'.pdf');
 }
 function openDateRangeModal(){
@@ -2238,8 +2357,10 @@ function exportPDFRange(){
   var cl=getClient(activeClientId);if(!cl)return;
   var folders=cl.folders.filter(function(f){return f.year>=from&&f.year<=to;});
   if(!folders.length){alert('No folders found in that range.');return;}
+  var includeLedgers=document.getElementById('pdfIncludeLedgers');
+  var withLedgers=includeLedgers?includeLedgers.checked:true;
   document.getElementById('dateRangeModal').style.display='none';
-  buildJsPDF(cl,folders,'Custom Range — '+from+(from!==to?' to '+to:''));
+  buildJsPDF(cl,folders,'Custom Range — '+from+(from!==to?' to '+to:''),withLedgers);
 }
 
 
@@ -2897,6 +3018,11 @@ function renderMain(){
     +'<button onclick="exportPDF(\'all\')">&#128196; All Years Summary</button>'
     +'<div class="pdf-divider"></div>'
     +'<button onclick="openDateRangeModal()">&#128197; Custom Date Range</button>'
+    +'<div class="pdf-divider"></div>'
+    +'<div style="padding:8px 14px;display:flex;align-items:center;gap:8px;font-size:12px;color:#002147;font-weight:600;cursor:pointer" onclick="togglePdfLedgers(event)">'
+    +'<input type="checkbox" id="pdfIncludeLedgers" checked style="width:14px;height:14px;cursor:pointer" onclick="event.stopPropagation();"/>'
+    +'<label for="pdfIncludeLedgers" style="cursor:pointer">Include Account Ledgers</label>'
+    +'</div>'
     +'</div></div>'
     +(canEdit()?'<button class="btn btn-sm" style="background:#dce3ec;color:var(--navy)" onclick="editFolderModal(\''+activeClientId+'\',\''+activeFolderId+'\')">&#9881; Edit Folder</button>':'')
     +(canEdit()?'<button class="btn btn-sm" style="background:#eee;color:#333" onclick="editClientModal(\''+activeClientId+'\')">&#9881; Edit Client</button>':'')
