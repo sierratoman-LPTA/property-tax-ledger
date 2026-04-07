@@ -2384,20 +2384,19 @@ function renderSummary(){
     for(var yi=0;yi<allFolders.length;yi++){
       var yf=allFolders[yi];var yr2=yf.rows||[];
       var ySav=totMV(yr2,'taxSavings');
-      var yRed=yr2.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+      var yRed=totMV(yr2,'mktRed');
       yoyData.push({year:yf.year,savings:ySav,mktRed:yRed,accounts:yr2.length});
     }
-    var maxSav=Math.max.apply(null,yoyData.map(function(d){return d.savings;}));
-    var maxRed=Math.max.apply(null,yoyData.map(function(d){return d.mktRed;}));
-    var chartMax=Math.max(maxSav,maxRed)||1;
+    var maxSav=Math.max.apply(null,yoyData.map(function(d){return d.savings;}))||1;
+    var maxRed=Math.max.apply(null,yoyData.map(function(d){return d.mktRed;}))||1;
     var BAR_H=160;
     var barW=Math.min(72,Math.floor(480/yoyData.length)-16);
 
     var bars='';
     for(var yi=0;yi<yoyData.length;yi++){
       var d=yoyData[yi];
-      var savH=d.savings>0?Math.max(4,Math.round((d.savings/chartMax)*BAR_H)):0;
-      var redH=d.mktRed>0?Math.max(4,Math.round((d.mktRed/chartMax)*BAR_H)):0;
+      var savH=d.savings>0?Math.max(4,Math.round((d.savings/maxSav)*BAR_H)):0;
+      var redH=d.mktRed>0?Math.max(4,Math.round((d.mktRed/maxRed)*BAR_H)):0;
       var savLbl=d.savings>0?'$'+Math.round(d.savings/1000)+'K':'';
       if(d.savings>=1000000)savLbl='$'+(d.savings/1000000).toFixed(1)+'M';
       var redLbl=d.mktRed>0?'$'+Math.round(d.mktRed/1000)+'K':'';
