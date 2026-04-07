@@ -2011,9 +2011,9 @@ function exportPDF(mode){
   if(mode==='year'){
     var af=getActiveFolder();
     if(!af){alert('Please open a specific year folder first to export the current year summary.');return;}
-    buildJsPDF(cl,[af],'Current Year Summary — '+af.year,withLedgers);
+    buildJsPDF(cl,[af],'Current Year Report — '+af.year,withLedgers);
   } else {
-    buildJsPDF(cl,cl.folders||[],'All Years Summary',withLedgers);
+    buildJsPDF(cl,cl.folders||[],'All Years Report',withLedgers);
   }
 }
 
@@ -2064,7 +2064,68 @@ function buildJsPDF(cl,folders,reportTitle,withLedgers){
   var yearRange=folders.length===1?folders[0].year:folders[0].year+' – '+folders[folders.length-1].year;
   var headerTitle=cl.name+' — '+(reportTitle||'Property Tax Report');
 
-  // ── Page 1: Executive Summary ──
+  // ── Cover Page ────────────────────────────────────────────────────────────────
+  // Full navy background
+  doc.setFillColor(navy[0],navy[1],navy[2]);
+  doc.rect(0,0,pageW,pageH,'F');
+  // Gold accent bar top
+  doc.setFillColor(gold[0],gold[1],gold[2]);
+  doc.rect(0,0,pageW,6,'F');
+  // Gold accent bar bottom
+  doc.setFillColor(gold[0],gold[1],gold[2]);
+  doc.rect(0,pageH-6,pageW,6,'F');
+  // Subtle gold vertical stripe on left
+  doc.setFillColor(gold[0],gold[1],gold[2]);
+  doc.setGState(new doc.GState({opacity:0.15}));
+  doc.rect(0,0,8,pageH,'F');
+  doc.setGState(new doc.GState({opacity:1}));
+  // LANE wordmark area
+  doc.setTextColor(gold[0],gold[1],gold[2]);
+  doc.setFont('helvetica','bold');doc.setFontSize(13);
+  doc.text('LANE PROPERTY TAX ADVOCATES',margin+14,38);
+  doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(255,255,255);
+  doc.setGState(new doc.GState({opacity:0.5}));
+  doc.text('Confidential — Prepared Exclusively for '+cl.name,margin+14,50);
+  doc.setGState(new doc.GState({opacity:1}));
+  // Center content block
+  var cx=pageW/2;var cy=pageH/2;
+  // Thin gold rule above client name
+  doc.setFillColor(gold[0],gold[1],gold[2]);
+  doc.rect(cx-60,cy-52,120,1.5,'F');
+  // Client name
+  doc.setTextColor(white[0],white[1],white[2]);
+  doc.setFont('helvetica','bold');
+  var clientFontSize=cl.name.length>24?20:26;
+  doc.setFontSize(clientFontSize);
+  doc.text(cl.name,cx,cy-36,{align:'center'});
+  // Report type
+  doc.setTextColor(gold[0],gold[1],gold[2]);
+  doc.setFont('helvetica','bold');doc.setFontSize(10);
+  doc.text('PROPERTY TAX EXECUTIVE SUMMARY',cx,cy-16,{align:'center'});
+  // Year range badge
+  doc.setFillColor(gold[0],gold[1],gold[2]);
+  doc.roundedRect(cx-28,cy-8,56,16,3,3,'F');
+  doc.setTextColor(0,33,71);doc.setFont('helvetica','bold');doc.setFontSize(10);
+  doc.text(yearRange,cx,cy+3,{align:'center'});
+  // Thin gold rule below
+  doc.setFillColor(gold[0],gold[1],gold[2]);
+  doc.rect(cx-60,cy+14,120,1.5,'F');
+  // Prepared by / date
+  doc.setTextColor(white[0],white[1],white[2]);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.setGState(new doc.GState({opacity:0.65}));
+  doc.text('Prepared by Lane Property Tax Advocates',cx,cy+30,{align:'center'});
+  doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),cx,cy+42,{align:'center'});
+  doc.setGState(new doc.GState({opacity:1}));
+  // Bottom confidentiality line
+  doc.setTextColor(gold[0],gold[1],gold[2]);
+  doc.setFont('helvetica','normal');doc.setFontSize(7);
+  doc.setGState(new doc.GState({opacity:0.6}));
+  doc.text('CONFIDENTIAL — FOR AUTHORIZED USE ONLY',cx,pageH-14,{align:'center'});
+  doc.setGState(new doc.GState({opacity:1}));
+
+  // ── Page 2: Executive Summary ──
+  doc.addPage();
   addPageHeader(headerTitle);
   var y=52;
 
@@ -2193,7 +2254,7 @@ function buildJsPDF(cl,folders,reportTitle,withLedgers){
   // We'll build a placeholder TOC now and fill page numbers after rendering
   var tocStartY=y;
   var tocLines=[];
-  tocLines.push({label:'Executive Summary',page:1});
+  tocLines.push({label:'Executive Summary',page:2});
   if(withLedgers){
     for(var ti=0;ti<ledgerFolders.length;ti++){
       tocLines.push({label:ledgerFolders[ti].year+' Account Ledger ('+ledgerFolders[ti].rows.length+' accounts)',page:'—'});
@@ -2307,10 +2368,14 @@ function buildJsPDF(cl,folders,reportTitle,withLedgers){
 
   // ── Finalize: add footers and update TOC page numbers ────────────────────────
   var totalPages=doc.internal.getNumberOfPages();
-  for(var p=1;p<=totalPages;p++){doc.setPage(p);addPageFooter(p,totalPages);}
+  for(var p=1;p<=totalPages;p++){
+    doc.setPage(p);
+    if(p===1)continue; // no footer on cover page
+    addPageFooter(p-1,totalPages-1); // offset page numbers so cover = unnumbered
+  }
 
   // Go back and redraw TOC with real page numbers
-  doc.setPage(1);
+  doc.setPage(2);
   for(var ti=0;ti<tocLines.length;ti++){
     var tl=tocLines[ti];
     if(tl.label!=='Executive Summary'&&withLedgers){
@@ -2361,7 +2426,7 @@ function exportPDFRange(){
   var includeLedgers=document.getElementById('pdfIncludeLedgers');
   var withLedgers=includeLedgers?includeLedgers.checked:true;
   document.getElementById('dateRangeModal').style.display='none';
-  buildJsPDF(cl,folders,'Custom Range — '+from+(from!==to?' to '+to:''),withLedgers);
+  buildJsPDF(cl,folders,'Custom Range Report — '+from+(from!==to?' to '+to:''),withLedgers);
 }
 
 
@@ -3017,9 +3082,9 @@ function renderMain(){
     +'<div class="pdf-drop" id="pdfDropWrap">'
     +'<button class="btn btn-sm" style="background:#8e44ad;color:#fff" onclick="showPdfMenu()">&#128196; Export PDF &#9662;</button>'
     +'<div class="pdf-menu" id="pdfMenu" style="display:none">'
-    +'<button onclick="exportPDF(\'year\')">&#128196; Current Year Summary</button>'
+    +'<button onclick="exportPDF(\'year\')">&#128196; Current Year Report</button>'
     +'<div class="pdf-divider"></div>'
-    +'<button onclick="exportPDF(\'all\')">&#128196; All Years Summary</button>'
+    +'<button onclick="exportPDF(\'all\')">&#128196; All Years Report</button>'
     +'<div class="pdf-divider"></div>'
     +'<button onclick="openDateRangeModal()">&#128197; Custom Date Range</button>'
     +'<div class="pdf-divider"></div>'
