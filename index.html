@@ -1634,6 +1634,7 @@ function previewBulkUpdate(){
     for(var j=0;j<_bulkMap.length;j++){
       var m=_bulkMap[j];var val=String(raw[m.col]||'').trim();
       if(['priorVal','prelim','prelimAppr','finalAppr','finalMkt'].indexOf(m.field)>=0)val=val.replace(/[$,]/g,'');
+      if(m.field==='status'){var smatch=STATUS.filter(function(s){return s.toLowerCase()===val.toLowerCase();})[0];val=smatch||val;}
       mapped[m.field]=val;
     }
     // Try to match by account # first, then address
@@ -1690,7 +1691,9 @@ function applyBulkUpdate(){
   _bulkResults.matched.forEach(function(m){
     var r=m.existingRow;
     Object.keys(m.updates).forEach(function(field){
-      if(m.updates[field]!==undefined&&m.updates[field]!=='')r[field]=m.updates[field];
+      var val=m.updates[field];
+      if(field==='status'){r[field]=val!==undefined?val:r[field];}
+      else if(val!==undefined&&val!==''){r[field]=val;}
     });
     recalcRow(r);
     logAudit('Bulk Update','Updated <i>'+(r.address||r.account||'account')+'</i> via bulk import.');
