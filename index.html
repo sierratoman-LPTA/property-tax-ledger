@@ -2255,7 +2255,7 @@ function isReduced(r){
 function renderKPIs(){
   var f=getActiveFolder();if(!f)return;var rows=f.rows||[];
   var reduced=rows.filter(function(r){return isReduced(r);}).length;
-  var totalRed=rows.reduce(function(s,r){var b=parseMV(r.priorVal),fv=parseMV(r.finalAppr);return s+(b&&fv&&fv<b?b-fv:0);},0);
+  var totalMktRed=totMV(rows,'mktRed');
   var savings=totMV(rows,'taxSavings');
   var lit=rows.filter(function(r){return r.status==='Active Litigation';}).length;
   var arb=rows.filter(function(r){return r.status==='Arbitration';}).length;
@@ -2263,7 +2263,7 @@ function renderKPIs(){
   k=document.getElementById('kpi_reduced');if(k)k.textContent=reduced;
   k=document.getElementById('kpi_lit');if(k)k.textContent=lit;
   k=document.getElementById('kpi_arb');if(k)k.textContent=arb;
-  k=document.getElementById('kpi_savings');if(k)k.textContent=totalRed>0?'$'+Math.round(totalRed).toLocaleString():'';
+  k=document.getElementById('kpi_savings');if(k)k.textContent=totalMktRed>0?'$'+Math.round(totalMktRed).toLocaleString():'';
   k=document.getElementById('kpi_taxsavings');if(k)k.textContent=savings>0?'$'+Math.round(savings).toLocaleString():'';
 }
 
@@ -2957,7 +2957,7 @@ function renderTab(){
       +'<div class="kpi"><div class="lbl">Accounts Reduced</div><div class="val" id="kpi_reduced">0</div></div>'
       +'<div class="kpi"><div class="lbl">Active Litigation</div><div class="val" id="kpi_lit">0</div></div>'
       +'<div class="kpi"><div class="lbl">Arbitration</div><div class="val" id="kpi_arb">0</div></div>'
-      +'<div class="kpi"><div class="lbl">Total Value Reduced</div><div class="val" id="kpi_savings"></div></div>'
+      +'<div class="kpi"><div class="lbl">Total Mkt Val Reduced</div><div class="val" id="kpi_savings"></div></div>'
       +'<div class="kpi gold-border"><div class="lbl gold">Total Tax Savings</div><div class="val" id="kpi_taxsavings"></div></div>'
       +'</div>'
       +'<div class="toolbar" style="position:relative">'
