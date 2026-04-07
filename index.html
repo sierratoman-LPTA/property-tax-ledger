@@ -1827,7 +1827,10 @@ function buildExecSummaryHtml(cl, folders){
   var allLit=allRows.filter(function(r){return r.status==='Active Litigation';}).length;
   var allArb=allRows.filter(function(r){return r.status==='Arbitration';}).length;
   var allFormal=allRows.filter(function(r){return r.status==='Awaiting Formal';}).length;
-  var isSingle=folders.length===1;
+  var latestFolder=folders[folders.length-1];
+  var latestRows=latestFolder?latestFolder.rows||[]:allRows;
+  var latestCount=latestRows.length;
+  var latestYear=latestFolder?latestFolder.year:'';
   var yearLabel=isSingle?folders[0].year:'All Years ('+folders.map(function(f){return f.year;}).join(', ')+')';
   var pctReduced=allRows.length>0?((reducedBelowLast/allRows.length)*100).toFixed(1):0;
 
@@ -1892,11 +1895,11 @@ function buildExecSummaryHtml(cl, folders){
   // Main header
   h+='<div class="main-hdr"><h1>'+esc(cl.name)+'</h1><p>PROPERTY TAX EXECUTIVE SUMMARY &nbsp;&bull;&nbsp; '+yearLabel.toUpperCase()+'</p></div>';
   // Savings banner
-  h+='<div class="savings-banner"><div class="lbl">Total Tax Savings</div><div class="amt">'+(allSavings>0?fmtMV(allSavings):'')+'</div><div class="sub">'+yearLabel+' &nbsp;&bull;&nbsp; '+allRows.length+' Accounts</div></div>';
+  h+='<div class="savings-banner"><div class="lbl">Total Tax Savings</div><div class="amt">'+(allSavings>0?fmtMV(allSavings):'')+'</div><div class="sub">'+yearLabel+' &nbsp;&bull;&nbsp; '+latestCount+' Accounts ('+latestYear+')</div></div>';
 
   // Key highlights grid
   h+='<div class="highlights">';
-  h+='<div class="hl-card"><div class="hl-val green">'+reducedBelowLast+'</div><div class="hl-lbl">Accounts Reduced Below Prior Year</div><div class="hl-sub">Out of '+allRows.length+' total accounts</div></div>';
+  h+='<div class="hl-card"><div class="hl-val green">'+reducedBelowLast+'</div><div class="hl-lbl">Accounts Reduced Below Prior Year</div><div class="hl-sub">Out of '+latestCount+' accounts ('+latestYear+')</div></div>';
   h+='<div class="hl-card"><div class="hl-val green">'+(allTotalRed>0?fmtMV(allTotalRed):'')+'</div><div class="hl-lbl">Total Value Reduced</div><div class="hl-sub">Certified appraisal reductions</div></div>';
   h+='<div class="hl-card"><div class="hl-val '+(allLit>0?'red':'green')+'">'+allLit+'</div><div class="hl-lbl">Active Litigation</div><div class="hl-sub">'+allArb+' Arbitration &nbsp;&bull;&nbsp; '+allFormal+' Awaiting Formal</div></div>';
   h+='</div>';
@@ -2083,8 +2086,10 @@ function buildJsPDF(cl,folders,reportTitle){
   for(var fi0=0;fi0<folders.length;fi0++){var fr0=folders[fi0].rows||[];totalPrelimAll+=totMV(fr0,'prelim');}
   var totalRedAll=allRows.reduce(function(s,r){return s+(parseMV(r.mktRed)||0);},0);
   var avgRedPct=totalPrelimAll>0&&totalRedAll>0?(totalRedAll/totalPrelimAll*100).toFixed(1):null;
+  var latestPdfFolder=folders[folders.length-1];
+  var latestPdfCount=latestPdfFolder?(latestPdfFolder.rows||[]).length:allRows.length;
   var kpis=[
-    {label:'Total Accounts',val:String(allRows.length),color:navy},
+    {label:'Total Accounts',val:String(latestPdfCount),color:navy},
     {label:'Active Litigation',val:String(totalLit),color:totalLit>0?[192,57,43]:navy},
     {label:'Arbitration',val:String(totalArb),color:navy},
     {label:'Awaiting Formal',val:String(totalFormal),color:navy},
@@ -2372,6 +2377,7 @@ function renderSummary(){
     var yf=allFolders[yi];var yr2=yf.rows||[];
     var ySav=totMV(yr2,'taxSavings');
     var yMktRed=totMV(yr2,'mktRed');
+    var yPrior=totMV(yr2,'priorVal');
     var yFinal=totMV(yr2,'finalAppr');
     var yLit=yr2.filter(function(r){return r.status==='Active Litigation';}).length;
     var yArb=yr2.filter(function(r){return r.status==='Arbitration';}).length;
