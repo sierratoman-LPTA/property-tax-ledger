@@ -2374,70 +2374,74 @@ function renderSummary(){
   var rRows=topRed.length?topRed.map(function(r){return'<tr><td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.address||'--')+'</td><td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.owner||'--')+'</td><td style="text-align:right">'+fmtMV(r.priorVal)+'</td><td style="text-align:right">'+fmtMV(r.finalAppr)+'</td><td style="text-align:right;color:#155724;font-weight:700">$'+Math.round(r._red).toLocaleString()+'</td></tr>';}).join(''):'<tr><td colspan="5" style="padding:12px;color:#aaa;text-align:center">Enter prior and final appr values to see reductions</td></tr>';
   var chgHtml=chg?(' &middot; Portfolio change: <b style="color:'+(parseFloat(chg)>=0?'#856404':'#155724')+'">'+(parseFloat(chg)>=0?'+':'')+chg+'%</b>'):'';
   var savBanner=savings>0?'<div style="background:#D4EDDA;border:2px solid #28A745;border-radius:7px;padding:14px;text-align:center;margin-bottom:14px"><div style="font-size:11px;color:#155724;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Total Tax Savings '+esc(f.year)+'</div><div style="font-size:26px;font-weight:700;color:#155724">$'+Math.round(savings).toLocaleString()+'</div></div>':'';
-  // ── Year-over-Year Savings Trend Chart ──────────────────────────────────────
+  // ── Year-over-Year Summary Table ──────────────────────────────────────────────
   var cl2=getClient(activeClientId);
   var allFolders=(cl2&&cl2.folders)||[];
   var yoyHtml='';
-  if(allFolders.length>1){
-    // Collect per-year data
-    var yoyData=[];
-    for(var yi=0;yi<allFolders.length;yi++){
-      var yf=allFolders[yi];var yr2=yf.rows||[];
-      var ySav=totMV(yr2,'taxSavings');
-      var yRed=totMV(yr2,'mktRed');
-      yoyData.push({year:yf.year,savings:ySav,mktRed:yRed,accounts:yr2.length});
-    }
-    var maxSav=Math.max.apply(null,yoyData.map(function(d){return d.savings;}))||1;
-    var maxRed=Math.max.apply(null,yoyData.map(function(d){return d.mktRed;}))||1;
-    var BAR_H=160;
-    var barW=Math.min(72,Math.floor(480/yoyData.length)-16);
-
-    var bars='';
-    for(var yi=0;yi<yoyData.length;yi++){
-      var d=yoyData[yi];
-      var savH=d.savings>0?Math.max(4,Math.round((d.savings/maxSav)*BAR_H)):0;
-      var redH=d.mktRed>0?Math.max(4,Math.round((d.mktRed/maxRed)*BAR_H)):0;
-      var savLbl=d.savings>0?'$'+Math.round(d.savings/1000)+'K':'';
-      if(d.savings>=1000000)savLbl='$'+(d.savings/1000000).toFixed(1)+'M';
-      var redLbl=d.mktRed>0?'$'+Math.round(d.mktRed/1000)+'K':'';
-      if(d.mktRed>=1000000)redLbl='$'+(d.mktRed/1000000).toFixed(1)+'M';
-      bars+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:'+barW+'px">'
-        +'<div style="display:flex;gap:5px;align-items:flex-end;height:'+BAR_H+'px">'
-        // Tax Savings bar (green)
-        +'<div style="display:flex;flex-direction:column;align-items:center;gap:2px">'
-        +(savH>0?'<div style="font-size:9px;font-weight:700;color:#155724">'+savLbl+'</div>':'<div style="font-size:9px;color:transparent">.</div>')
-        +'<div style="width:'+(barW/2-3)+'px;height:'+savH+'px;background:linear-gradient(180deg,#2ecc71,#155724);border-radius:3px 3px 0 0" title="Tax Savings: '+savLbl+'"></div>'
-        +'</div>'
-        // Mkt Reduction bar (navy)
-        +'<div style="display:flex;flex-direction:column;align-items:center;gap:2px">'
-        +(redH>0?'<div style="font-size:9px;font-weight:700;color:#002147">'+redLbl+'</div>':'<div style="font-size:9px;color:transparent">.</div>')
-        +'<div style="width:'+(barW/2-3)+'px;height:'+redH+'px;background:linear-gradient(180deg,#3a6fa8,#002147);border-radius:3px 3px 0 0" title="Mkt Value Reduced: '+redLbl+'"></div>'
-        +'</div>'
-        +'</div>'
-        // X axis label
-        +'<div style="font-size:11px;font-weight:700;color:#444;border-top:2px solid #ddd;padding-top:5px;width:100%;text-align:center">'+esc(d.year)+'</div>'
-        +'<div style="font-size:9px;color:#888">'+d.accounts+' accts</div>'
-        +'</div>';
-    }
-
-    yoyHtml='<div class="sum-card" style="margin-top:14px">'
-      +'<div class="sum-hdr" style="display:flex;justify-content:space-between;align-items:center">'
-      +'<span>Year-over-Year Savings Trend</span>'
-      +'<span style="display:flex;gap:12px;font-size:10px;font-weight:400;opacity:.9">'
-      +'<span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;background:#28a745;border-radius:2px"></span>Tax Savings</span>'
-      +'<span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;background:#002147;border-radius:2px"></span>Mkt Val Reduced</span>'
-      +'</span>'
-      +'</div>'
-      +'<div style="padding:18px 20px 10px">'
-      +'<div style="display:flex;gap:8px;align-items:flex-end;justify-content:center;overflow-x:auto;padding-bottom:4px">'+bars+'</div>'
-      +'</div>'
-      +'</div>';
-  } else if(allFolders.length===1){
-    yoyHtml='<div class="sum-card" style="margin-top:14px">'
-      +'<div class="sum-hdr">Year-over-Year Savings Trend</div>'
-      +'<div style="padding:28px;text-align:center;color:#aaa;font-size:12px">Add a second year folder to see the trend chart.</div>'
-      +'</div>';
+  var yoyData=[];
+  for(var yi=0;yi<allFolders.length;yi++){
+    var yf=allFolders[yi];var yr2=yf.rows||[];
+    var ySav=totMV(yr2,'taxSavings');
+    var yMktRed=totMV(yr2,'mktRed');
+    var yPrior=totMV(yr2,'priorVal');
+    var yPrelim=totMV(yr2,'prelim');
+    var yLit=yr2.filter(function(r){return r.status==='Active Litigation';}).length;
+    var yArb=yr2.filter(function(r){return r.status==='Arbitration';}).length;
+    var yReduced=yr2.filter(function(r){return isReduced(r);}).length;
+    yoyData.push({year:yf.year,accounts:yr2.length,reduced:yReduced,lit:yLit,arb:yArb,prior:yPrior,prelim:yPrelim,mktRed:yMktRed,savings:ySav});
   }
+  var totPrior=yoyData.reduce(function(s,d){return s+d.prior;},0);
+  var totPrelim=yoyData.reduce(function(s,d){return s+d.prelim;},0);
+  var totMktRed2=yoyData.reduce(function(s,d){return s+d.mktRed;},0);
+  var totSav=yoyData.reduce(function(s,d){return s+d.savings;},0);
+  var totAccts=yoyData.reduce(function(s,d){return s+d.accounts;},0);
+  var totReduced=yoyData.reduce(function(s,d){return s+d.reduced;},0);
+  var totLit=yoyData.reduce(function(s,d){return s+d.lit;},0);
+  var totArb=yoyData.reduce(function(s,d){return s+d.arb;},0);
+
+  var yoyRows='';
+  for(var yi=0;yi<yoyData.length;yi++){
+    var d=yoyData[yi];var bg=yi%2===0?'#fff':'#f8f9fb';
+    yoyRows+='<tr style="background:'+bg+'">'
+      +'<td style="padding:7px 10px;font-weight:700;color:#002147">'+esc(d.year)+'</td>'
+      +'<td style="padding:7px 10px;text-align:right">'+d.accounts+'</td>'
+      +'<td style="padding:7px 10px;text-align:right;color:#155724;font-weight:600">'+d.reduced+'</td>'
+      +'<td style="padding:7px 10px;text-align:right;color:#856404">'+( d.lit>0?d.lit:'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:right;color:#004085">'+(d.arb>0?d.arb:'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:right">'+(d.prior>0?'$'+Math.round(d.prior).toLocaleString():'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:right">'+(d.prelim>0?'$'+Math.round(d.prelim).toLocaleString():'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:right;color:#155724;font-weight:600">'+(d.mktRed>0?'$'+Math.round(d.mktRed).toLocaleString():'—')+'</td>'
+      +'<td style="padding:7px 10px;text-align:right;color:#155724;font-weight:700">'+(d.savings>0?'$'+Math.round(d.savings).toLocaleString():'—')+'</td>'
+      +'</tr>';
+  }
+
+  yoyHtml='<div class="sum-card" style="margin-top:14px">'
+    +'<div class="sum-hdr">Year-over-Year Summary</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<thead><tr>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:left;font-size:11px;position:static;cursor:default">Year</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Accounts</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Reduced</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Litigation</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Arbitration</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Prior Value</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Prelim Value</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Mkt Val Reduced</th>'
+    +'<th style="background:#f0f2f5;padding:7px 10px;font-weight:600;color:#444;text-align:right;font-size:11px;position:static;cursor:default">Tax Savings</th>'
+    +'</tr></thead>'
+    +'<tbody>'+yoyRows+'</tbody>'
+    +'<tfoot><tr>'
+    +'<td style="background:#002147;color:#fff;font-weight:700;padding:7px 10px">TOTAL</td>'
+    +'<td style="background:#002147;color:#fff;font-weight:700;padding:7px 10px;text-align:right">'+totAccts+'</td>'
+    +'<td style="background:#002147;color:#a8d5b5;font-weight:700;padding:7px 10px;text-align:right">'+totReduced+'</td>'
+    +'<td style="background:#002147;color:#fff;font-weight:700;padding:7px 10px;text-align:right">'+(totLit>0?totLit:'—')+'</td>'
+    +'<td style="background:#002147;color:#fff;font-weight:700;padding:7px 10px;text-align:right">'+(totArb>0?totArb:'—')+'</td>'
+    +'<td style="background:#002147;color:#fff;font-weight:700;padding:7px 10px;text-align:right">'+(totPrior>0?'$'+Math.round(totPrior).toLocaleString():'—')+'</td>'
+    +'<td style="background:#002147;color:#fff;font-weight:700;padding:7px 10px;text-align:right">'+(totPrelim>0?'$'+Math.round(totPrelim).toLocaleString():'—')+'</td>'
+    +'<td style="background:#002147;color:#a8d5b5;font-weight:700;padding:7px 10px;text-align:right">'+(totMktRed2>0?'$'+Math.round(totMktRed2).toLocaleString():'—')+'</td>'
+    +'<td style="background:#002147;color:#a8d5b5;font-weight:700;padding:7px 10px;text-align:right">'+(totSav>0?'$'+Math.round(totSav).toLocaleString():'—')+'</td>'
+    +'</tr></tfoot>'
+    +'</table></div>';
 
   document.getElementById('summaryContent').innerHTML=
     savBanner
