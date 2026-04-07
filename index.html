@@ -377,13 +377,7 @@ tfoot td.tl{text-align:left}
       <div class="field"><label>Prelim Appr Value Label</label><input id="fm_prelimAppr"/></div>
       <div class="field"><label>Final Appr Value Label</label><input id="fm_finalAppr"/></div>
       <div class="field"><label>Final Market Value Label</label><input id="fm_finalMkt"/></div>
-      <div style="margin-top:10px;padding:10px 12px;background:#fff8e1;border:1px solid #ffc107;border-radius:6px;display:flex;align-items:center;gap:10px">
-        <input type="checkbox" id="fm_clientHidden" style="width:16px;height:16px;cursor:pointer;flex-shrink:0"/>
-        <div>
-          <div style="font-size:12px;font-weight:700;color:#333">Hide from Client View</div>
-          <div style="font-size:10px;color:#888;margin-top:1px">Client cannot access this year's ledger in PDF exports or their login view</div>
-        </div>
-      </div>
+
     </div>
     <div class="modal-btns">
       <button class="btn" style="background:#eee;color:#333" onclick="document.getElementById('folderModal').style.display='none'">Cancel</button>
@@ -1083,8 +1077,8 @@ function renderSidebar(){
     if(exp&&c.folders){
       for(var j=0;j<c.folders.length;j++){
         var f=c.folders[j];var isA=activeClientId===c.id&&activeFolderId===f.id;
-        if(isClientSession()&&f.clientHidden)continue;
-        var lockIcon=f.clientHidden?'<span style="font-size:9px;opacity:.5" title="Hidden from client">&#128274;</span>':'';
+        if(isClientSession()&&!f.published)continue;
+        var lockIcon=(!f.published)?'<span style="font-size:9px;opacity:.5" title="Not published">&#128274;</span>':'';
         html+='<div class="sb-folder'+(isA?' active':'')+'" onclick="selectFolder(\''+c.id+'\',\''+f.id+'\')">'
           +'<span style="font-size:10px;opacity:.6">&#128193;</span>'
           +'<span class="fname">'+esc(f.year)+'</span>'
@@ -1108,7 +1102,6 @@ function toggleClient(cid){activeClientId=cid;activeFolderId=null;activeTab='led
 function selectFolder(cid,fid){
   if(isClientSession()){
     var f=getFolder(cid,fid);
-    if(f&&f.clientHidden){return;}
     if(f&&!f.published){showUnpublishedMsg(f.year);return;}
   }
   activeClientId=cid;activeFolderId=fid;
@@ -1242,7 +1235,6 @@ function openNewFolderModal(cid){
   document.getElementById('fm_prelimAppr').value=lbl.prelimAppr;
   document.getElementById('fm_finalAppr').value=lbl.finalAppr;
   document.getElementById('fm_finalMkt').value=lbl.finalMkt;
-  document.getElementById('fm_clientHidden').checked=false;
   document.getElementById('fmDeleteBtn').style.display='none';
   document.getElementById('folderModal').style.display='flex';
   setTimeout(function(){document.getElementById('fm_year').focus();},100);
@@ -1258,11 +1250,10 @@ function saveFolder(){
     finalAppr:document.getElementById('fm_finalAppr').value.trim()||lbl.finalAppr,
     finalMkt:document.getElementById('fm_finalMkt').value.trim()||lbl.finalMkt
   };
-  var clientHidden=document.getElementById('fm_clientHidden').checked;
-  if(editingFolderId){var f=getFolder(editingClientId,editingFolderId);if(f){f.year=year;f.labels=labels;f.clientHidden=clientHidden;}}
+  if(editingFolderId){var f=getFolder(editingClientId,editingFolderId);if(f){f.year=year;f.labels=labels;}}
   else{
     var c=getClient(editingClientId);if(!c)return;if(!c.folders)c.folders=[];
-    var nf={id:uid(),year:year,labels:labels,clientHidden:clientHidden,rows:[emptyRow()]};
+    var nf={id:uid(),year:year,labels:labels,rows:[emptyRow()]};
     c.folders.push(nf);activeClientId=editingClientId;activeFolderId=nf.id;
   }
   saveDB();document.getElementById('folderModal').style.display='none';renderSidebar();renderMain();
@@ -1276,7 +1267,6 @@ function editFolderModal(cid,fid){
   document.getElementById('fm_prelimAppr').value=f.labels.prelimAppr||'';
   document.getElementById('fm_finalAppr').value=f.labels.finalAppr||'';
   document.getElementById('fm_finalMkt').value=f.labels.finalMkt||'';
-  document.getElementById('fm_clientHidden').checked=f.clientHidden||false;
   document.getElementById('fmDeleteBtn').style.display='inline-block';
   document.getElementById('folderModal').style.display='flex';
 }
@@ -2027,7 +2017,7 @@ function exportPDF(mode){
     buildJsPDF(cl,[af],'Current Year Report — '+af.year,withLedgers);
   } else {
     var exportFolders=cl.folders||[];
-    if(isClientSession())exportFolders=exportFolders.filter(function(f){return!f.clientHidden;});
+    if(isClientSession())exportFolders=exportFolders.filter(function(f){return f.published===true;});
     buildJsPDF(cl,exportFolders,'All Years Report',withLedgers);
   }
 }
@@ -2433,7 +2423,7 @@ function exportPDFRange(){
   var to=document.getElementById('drTo').value;
   var cl=getClient(activeClientId);if(!cl)return;
   var folders=cl.folders.filter(function(f){return f.year>=from&&f.year<=to;});
-  if(isClientSession())folders=folders.filter(function(f){return!f.clientHidden;});
+  if(isClientSession())folders=folders.filter(function(f){return f.published===true;});
   if(!folders.length){alert('No folders found in that range.');return;}
   var includeLedgers=document.getElementById('pdfIncludeLedgers');
   var withLedgers=includeLedgers?includeLedgers.checked:true;
@@ -3015,7 +3005,7 @@ function renderClientOverview(cl){
 
   for(var fi=folders.length-1;fi>=0;fi--){
     var f=folders[fi];var rows=f.rows||[];
-    if(isClientSession()&&f.clientHidden)continue;
+    if(isClientSession()&&!f.published)continue;
     var fSavings=totMV(rows,'taxSavings');
     var fReduced=rows.filter(function(r){return isReduced(r);}).length;
     var fLit=rows.filter(function(r){return r.status==='Active Litigation';}).length;
@@ -3023,7 +3013,7 @@ function renderClientOverview(cl){
     var fFormal=rows.filter(function(r){return r.status==='Awaiting Formal';}).length;
     var fPrelim=totMV(rows,'prelim');var fPrior=totMV(rows,'priorVal');
     var isPublished=f.published===true;
-    var isHidden=f.clientHidden===true;
+    var isHidden=!f.published;
     var cardStyle=(!isPublished&&isClientSession())?'opacity:.7':'';
 
     var cardClick=isClientSession()&&!isPublished
