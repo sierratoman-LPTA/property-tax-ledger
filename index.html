@@ -2563,7 +2563,7 @@ function renderTable(){
 // ── Summary ────────────────────────────────────────────────────────────────────
 function renderSummary(){
   var f=getActiveFolder();if(!f)return;var cl=getClient(activeClientId);var rows=f.rows||[];
-  var t24=totMV(rows,'priorVal'),t25=totMV(rows,'prelim');
+  var t24=totMV(rows,'priorVal'),t25=totMV(rows,'finalAppr');
   var chg=(t24>0&&t25>0)?((t25-t24)/t24*100).toFixed(1):null;
   var savings=totMV(rows,'taxSavings');
   var ctyData=[];
@@ -2573,7 +2573,7 @@ function renderSummary(){
     .filter(function(r){return r._red>0;}).sort(function(a,b){return b._red-a._red;}).slice(0,10);
   var cRows='';for(var i=0;i<ctyData.length;i++){var x=ctyData[i];cRows+='<tr><td>'+esc(x.county)+'</td><td style="text-align:right">'+x.count+'</td><td style="text-align:right">'+x.pct+'%</td><td style="text-align:right">'+(x.v24>0?'$'+Math.round(x.v24).toLocaleString():'--')+'</td></tr>';}
   var rRows=topRed.length?topRed.map(function(r){return'<tr><td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.address||'--')+'</td><td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.owner||'--')+'</td><td style="text-align:right">'+fmtMV(r.priorVal)+'</td><td style="text-align:right">'+fmtMV(r.finalAppr)+'</td><td style="text-align:right;color:#155724;font-weight:700">$'+Math.round(r._red).toLocaleString()+'</td></tr>';}).join(''):'<tr><td colspan="5" style="padding:12px;color:#aaa;text-align:center">Enter prior and final appr values to see reductions</td></tr>';
-  var chgHtml=chg?(' &middot; Portfolio change: <b style="color:'+(parseFloat(chg)>=0?'#856404':'#155724')+'">'+(parseFloat(chg)>=0?'+':'')+chg+'%</b>'):'';
+  var chgHtml=chg?(' &middot; Final Appr vs Prior Year: <b style="color:'+(parseFloat(chg)>=0?'#856404':'#155724')+'">'+(parseFloat(chg)>=0?'+':'')+chg+'%</b>'):'';
   var savBanner=savings>0?'<div style="background:#D4EDDA;border:2px solid #28A745;border-radius:7px;padding:14px;text-align:center;margin-bottom:14px"><div style="font-size:11px;color:#155724;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Total Tax Savings '+esc(f.year)+'</div><div style="font-size:26px;font-weight:700;color:#155724">$'+Math.round(savings).toLocaleString()+'</div></div>':'';
   // ── Year-over-Year Summary Table ──────────────────────────────────────────────
   var cl2=getClient(activeClientId);
